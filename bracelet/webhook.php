@@ -1,11 +1,12 @@
 <?php
+
 declare(strict_types=1);
+require 'config.php';
+require 'calc.php';
+// Функции проверки IP-адресов Telegram вынесены в отдельный файл,
+// чтобы их можно было переиспользовать и тестировать изолированно.
+require __DIR__ . '/telegram_ip.php';
 
-// Подключаем файл конфигурации приложения
-require __DIR__ . '/config.php';
-
-// Подключаем функции расчёта параметров браслета
-require __DIR__ . '/calc.php';
 
 // Получаем заголовки и IP-адрес отправителя
 $headers  = function_exists('getallheaders') ? getallheaders() : [];
@@ -238,43 +239,6 @@ function isValidWebAppData($d): bool {
     }
 
     return true;
-}
-
-/**
- * Проверяет, принадлежит ли IP-адрес диапазонам Telegram.
- *
- * @param string $ip IP-адрес клиента.
- *
- * @return bool
- */
-function isTelegramIP(string $ip): bool {
-    $ranges = [
-        '149.154.160.0/20',
-        '91.108.4.0/22',
-    ];
-    foreach ($ranges as $range) {
-        if (ipInRange($ip, $range)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Проверяет, входит ли IP в указанный диапазон CIDR.
- *
- * @param string $ip   Проверяемый IP-адрес.
- * @param string $cidr Диапазон в формате CIDR.
- *
- * @return bool
- */
-function ipInRange(string $ip, string $cidr): bool {
-    [$subnet, $mask] = explode('/', $cidr);
-    $ipLong     = ip2long($ip);
-    $subnetLong = ip2long($subnet);
-    $mask       = -1 << (32 - (int)$mask);
-    $subnetLong &= $mask;
-    return ($ipLong & $mask) === $subnetLong;
 }
 
 /**
