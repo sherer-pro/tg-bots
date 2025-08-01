@@ -24,15 +24,27 @@ define('DB_NAME', $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: '');
  * Пользователь базы данных.
  *
  * @var string
+ *
+ * @throws RuntimeException Если переменная окружения не задана.
  */
-define('DB_USER', $_ENV['DB_USER'] ?? getenv('DB_USER') ?: 'bracelet_user');
+$dbUser = $_ENV['DB_USER'] ?? getenv('DB_USER');
+if ($dbUser === false || $dbUser === null || $dbUser === '') {
+    throw new RuntimeException('Переменная окружения DB_USER не задана');
+}
+define('DB_USER', $dbUser);
 
 /**
  * Пароль пользователя базы данных.
  *
  * @var string
+ *
+ * @throws RuntimeException Если переменная окружения не задана.
  */
-define('DB_PASSWORD', $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD') ?: 'secret');
+$dbPassword = $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD');
+if ($dbPassword === false || $dbPassword === null || $dbPassword === '') {
+    throw new RuntimeException('Переменная окружения DB_PASSWORD не задана');
+}
+define('DB_PASSWORD', $dbPassword);
 
 /**
  * Хост сервера базы данных.

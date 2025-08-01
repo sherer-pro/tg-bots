@@ -1,9 +1,12 @@
 <?php
+
+declare(strict_types=1);
 require 'config.php';
 require 'calc.php';
 // Функции проверки IP-адресов Telegram вынесены в отдельный файл,
 // чтобы их можно было переиспользовать и тестировать изолированно.
 require __DIR__ . '/telegram_ip.php';
+
 
 // Получаем заголовки и IP-адрес отправителя
 $headers  = function_exists('getallheaders') ? getallheaders() : [];
@@ -139,12 +142,16 @@ if (isset($msg['web_app_data']['data'])) {
  * Отправляет сообщение пользователю Telegram через метод sendMessage.
  * Использует HTTP POST‑запрос к Bot API. При сетевых сбоях или
  * отрицательном HTTP‑статусе функция записывает ошибку в лог и
- * возвращает `false`, исключения не выбрасывает.
+ * возвращает `false`, исключения не выбрасывает. Время установления
+ * соединения ограничено 5 секундами, выполнение запроса — 10 секундами.
  *
  * @param string     $text  Текст отправляемого сообщения.
  * @param int|string $chat  Идентификатор чата или имя пользователя.
  * @param array      $extra Дополнительные поля запроса,
  *                          например `reply_markup`.
+ *
+ * @internal Используются таймауты `CURLOPT_CONNECTTIMEOUT` = 5 и
+ *           `CURLOPT_TIMEOUT` = 10.
  *
  * @return bool `true` в случае успешной отправки, иначе `false`.
  */
@@ -155,9 +162,11 @@ function send($text, $chat, $extra = []) {
     // Инициализируем cURL для отправки POST-запроса
     $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query($data),
-        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,                     // Используем метод POST
+        CURLOPT_POSTFIELDS     => http_build_query($data),  // Тело запроса в формате key=value
+        CURLOPT_RETURNTRANSFER => true,                     // Возвращаем ответ как строку
+        CURLOPT_CONNECTTIMEOUT => 5,                        // Ждём соединение не более 5 секунд
+        CURLOPT_TIMEOUT        => 10,                       // Общее ожидание ответа — до 10 секунд
     ]);
 
     $response = curl_exec($ch);
