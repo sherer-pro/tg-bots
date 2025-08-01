@@ -1,6 +1,11 @@
 <?php
-require 'config.php';
-require 'calc.php';
+declare(strict_types=1);
+
+// Подключаем файл конфигурации приложения
+require __DIR__ . '/config.php';
+
+// Подключаем функции расчёта параметров браслета
+require __DIR__ . '/calc.php';
 
 // Получаем заголовки и IP-адрес отправителя
 $headers  = function_exists('getallheaders') ? getallheaders() : [];
