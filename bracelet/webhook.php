@@ -36,7 +36,12 @@ if (isset($msg['text']) && $msg['text'] === '/start') {
         ]]],
         'resize_keyboard' => true
     ];
-    send('Нажми кнопку, заполни форму и получи расчёт', $chatId, ['reply_markup' => json_encode($kb)]);
+    // Пытаемся отправить приветственное сообщение пользователю
+    $sent = send('Нажми кнопку, заполни форму и получи расчёт', $chatId, ['reply_markup' => json_encode($kb)]);
+    if (!$sent) {
+        // Если отправка не удалась, уведомляем пользователя отдельным сообщением
+        send('Не удалось отправить сообщение. Попробуй позже.', $chatId);
+    }
     exit;
 }
 
@@ -48,7 +53,13 @@ if (isset($msg['web_app_data']['data'])) {
     if (!isValidWebAppData($d)) {
         error_log('Невалидные web_app_data: ' . json_encode($msg['web_app_data'], JSON_UNESCAPED_UNICODE));
         $text = $lang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
-        send($text, $chatId);
+        // Уведомляем пользователя о неверных данных и проверяем успешность отправки
+        if (!send($text, $chatId)) {
+            $fallback = $lang === 'en'
+                ? 'Failed to send message. Try again later.'
+                : 'Не удалось отправить сообщение. Попробуй позже.';
+            send($fallback, $chatId);
+        }
         exit;
     }
 
@@ -72,7 +83,13 @@ if (isset($msg['web_app_data']['data'])) {
     } catch (\Throwable $e) {
         $text = $lang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
     }
-    send($text, $chatId);
+    // Отправляем результат пользователю и уведомляем о сбое при необходимости
+    if (!send($text, $chatId)) {
+        $fallback = $lang === 'en'
+            ? 'Failed to send message. Try again later.'
+            : 'Не удалось отправить сообщение. Попробуй позже.';
+        send($fallback, $chatId);
+    }
 }
 
 /**
@@ -82,12 +99,39 @@ if (isset($msg['web_app_data']['data'])) {
  * @param int|string $chat  Идентификатор чата.
  * @param array      $extra Дополнительные параметры запроса.
  *
- * @return void
+ * @return bool true, если запрос к Telegram API выполнен успешно
  */
 function send($text, $chat, $extra = []) {
-    $url = API_URL . 'sendMessage';
-    $data = array_merge(['chat_id'=>$chat, 'text'=>$text], $extra);
-    file_get_contents($url . '?' . http_build_query($data));
+    $url  = API_URL . 'sendMessage';
+    $data = array_merge(['chat_id' => $chat, 'text' => $text], $extra);
+
+    // Инициализируем cURL для отправки POST-запроса
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query($data),
+        CURLOPT_RETURNTRANSFER => true,
+    ]);
+
+    $response = curl_exec($ch);
+
+    // Проверяем наличие ошибок на уровне cURL
+    if ($response === false) {
+        error_log('Ошибка cURL: ' . curl_error($ch));
+        curl_close($ch);
+        return false;
+    }
+
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    // Анализируем HTTP-статус ответа
+    if ($httpCode < 200 || $httpCode >= 300) {
+        error_log('Ошибка HTTP: статус ' . $httpCode . '; ответ: ' . $response);
+        return false;
+    }
+
+    return true;
 }
 
 /**
