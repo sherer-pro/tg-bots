@@ -31,13 +31,13 @@
             ttl:'Параметры', wrist:'Обхват запястья, см',
             wraps:'Оборотов', pattern:'Узор (через запятую, мм)',
             mag:'Магнит, мм', tol:'Допуск, мм', btn:'Рассчитать',
-            err:'Заполни все поля корректно'
+            err:'Заполни все поля корректно (узор: числа через запятую)'
         },
         en: {
             ttl:'Parameters', wrist:'Wrist, cm',
             wraps:'Wraps', pattern:'Pattern (comma‑sep, mm)',
             mag:'Magnet, mm', tol:'Slack, mm', btn:'Calculate',
-            err:'Please fill all fields correctly'
+            err:'Please fill all fields correctly (pattern: numbers separated by commas)'
         }
     }[lang];
 
@@ -60,7 +60,14 @@
         err.textContent = '';
 
         const data = Object.fromEntries(new FormData(form).entries());
-        const ok = /^[\d.,]+$/.test(data.pattern) && +data.wrist_cm>0 && +data.wraps>0;
+        /**
+         * Проверяем корректность введённых данных.
+         * Регулярное выражение разрешает только числа,
+         * разделённые одиночными запятыми, с опциональной дробной частью
+         * после точки или запятой.
+         */
+        const ok = /^\d+(?:[.,]\d+)?(?:,\d+(?:[.,]\d+)?)*$/.test(data.pattern)
+            && +data.wrist_cm>0 && +data.wraps>0;
 
         if (!ok) {
             err.textContent = txt.err;
