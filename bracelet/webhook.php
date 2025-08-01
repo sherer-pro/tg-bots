@@ -1,6 +1,13 @@
 <?php
+
+declare(strict_types=1);
 require 'config.php';
 require 'calc.php';
+// Функции проверки IP-адресов Telegram вынесены в отдельный файл,
+// чтобы их можно было переиспользовать и тестировать изолированно.
+require __DIR__ . '/telegram_ip.php';
+
+if (!defined('WEBHOOK_LIB')):
 
 // Получаем заголовки и IP-адрес отправителя
 $headers  = function_exists('getallheaders') ? getallheaders() : [];
@@ -131,9 +138,11 @@ if (isset($msg['web_app_data']['data'])) {
         send($fallback, $chatId);
     }
 }
+endif;
 
 /**
  * Отправляет сообщение пользователю Telegram через метод sendMessage.
+
  * Использует HTTP POST-запрос к Bot API. При сетевых сбоях или
  * отрицательном HTTP-статусе функция записывает ошибку в лог и
  * возвращает `false`, исключения не выбрасывает.
@@ -142,6 +151,9 @@ if (isset($msg['web_app_data']['data'])) {
  * @param int|string $chat  Идентификатор чата или имя пользователя.
  * @param array      $extra Дополнительные поля запроса,
  *                          например `reply_markup`.
+ *
+ * @internal Используются таймауты `CURLOPT_CONNECTTIMEOUT` = 5 и
+ *           `CURLOPT_TIMEOUT` = 10.
  *
  * @return bool `true` в случае успешной отправки, иначе `false`.
  */
@@ -152,9 +164,11 @@ function send($text, $chat, $extra = []) {
     // Инициализируем cURL для отправки POST-запроса
     $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query($data),
-        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,                     // Используем метод POST
+        CURLOPT_POSTFIELDS     => http_build_query($data),  // Тело запроса в формате key=value
+        CURLOPT_RETURNTRANSFER => true,                     // Возвращаем ответ как строку
+        CURLOPT_CONNECTTIMEOUT => 5,                        // Ждём соединение не более 5 секунд
+        CURLOPT_TIMEOUT        => 10,                       // Общее ожидание ответа — до 10 секунд
     ]);
 
     $response = curl_exec($ch);
@@ -181,7 +195,15 @@ function send($text, $chat, $extra = []) {
 }
 
 /**
- * Проверяет структуру и типы данных, полученных от web_app.
+ * Проверяет структуру и корректность данных, поступивших из web_app.
+ *
+ * В процессе проверки выполняется:
+ * - наличие всех обязательных полей;
+ * - соответствие типов значений ожиданиям;
+ * - контроль диапазонов числовых параметров
+ *   (например, обхват запястья < 100 см);
+ * - ограничение длины строки с паттерном и числа элементов
+ *   после `explode`.
  *
  * @param mixed $d Данные из web_app_data.
  *
@@ -207,18 +229,46 @@ function isValidWebAppData($d): bool {
         return false;
     }
 
+    // Ограничения для числовых значений: все значения должны быть
+    // положительными и находиться в разумных пределах.
+    $wrist     = (float)$d['wrist_cm'];
+    $magnet    = (float)$d['magnet_mm'];
+    $tolerance = (float)$d['tolerance_mm'];
+    $wraps     = (int)$d['wraps'];
+
+    if ($wrist <= 0 || $wrist >= 100) {
+        return false; // обхват должен быть в диапазоне (0, 100)
+    }
+    if ($magnet <= 0 || $magnet >= 100) {
+        return false; // размеры магнита измеряются в мм, ограничим 0..100
+    }
+    if ($tolerance <= 0 || $tolerance >= 100) {
+        return false; // допуск по длине также ограничен
+    }
+    if ($wraps <= 0 || $wraps > 10) {
+        return false; // число витков должно быть положительным и не слишком большим
+    }
+
     if (!is_string($d['pattern']) || $d['pattern'] === '') {
+        return false;
+    }
+    // Ограничиваем длину строки паттерна и число элементов
+    if (mb_strlen($d['pattern']) > 100) {
         return false;
     }
 
     $parts = array_map('trim', explode(',', $d['pattern']));
-    if (empty($parts)) {
+    if (empty($parts) || count($parts) > 20) {
         return false;
     }
 
     foreach ($parts as $p) {
         if (!is_numeric($p)) {
             return false;
+        }
+        $val = (float)$p;
+        if ($val <= 0 || $val >= 100) {
+            return false; // каждый размер бусины в мм должен быть в пределах
         }
     }
 
@@ -227,43 +277,6 @@ function isValidWebAppData($d): bool {
     }
 
     return true;
-}
-
-/**
- * Проверяет, принадлежит ли IP-адрес диапазонам Telegram.
- *
- * @param string $ip IP-адрес клиента.
- *
- * @return bool
- */
-function isTelegramIP(string $ip): bool {
-    $ranges = [
-        '149.154.160.0/20',
-        '91.108.4.0/22',
-    ];
-    foreach ($ranges as $range) {
-        if (ipInRange($ip, $range)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Проверяет, входит ли IP в указанный диапазон CIDR.
- *
- * @param string $ip   Проверяемый IP-адрес.
- * @param string $cidr Диапазон в формате CIDR.
- *
- * @return bool
- */
-function ipInRange(string $ip, string $cidr): bool {
-    [$subnet, $mask] = explode('/', $cidr);
-    $ipLong     = ip2long($ip);
-    $subnetLong = ip2long($subnet);
-    $mask       = -1 << (32 - (int)$mask);
-    $subnetLong &= $mask;
-    return ($ipLong & $mask) === $subnetLong;
 }
 
 /**
@@ -277,6 +290,11 @@ function ipInRange(string $ip, string $cidr): bool {
  * @return void
  */
 function logError(string $message): void {
+    $dir = dirname(LOG_FILE); // Каталог, где хранится лог
+    if (!is_dir($dir)) { // Проверяем существование каталога
+        mkdir($dir, 0777, true); // Создаём каталог рекурсивно при необходимости
+    }
     $time = date('c'); // Текущее время в удобочитаемом формате
+    // Записываем сообщение в лог-файл
     error_log("[$time] $message\n", 3, LOG_FILE);
 }
