@@ -17,7 +17,7 @@ final class BraceletTextTest extends TestCase
 
         // Ожидаем точное текстовое описание с количеством бусин каждого размера
         $this->assertSame(
-            'Обхват 15 см → 8 бусин Ø10 мм и 9 бусин Ø8 мм + 5 мм допуск + 10 мм крепление',
+            'Обхват 15 см → 8 бусин Ø10 мм и 8 бусин Ø8 мм + 5 мм допуск + 10 мм крепление',
             $result
         );
     }
@@ -57,5 +57,19 @@ final class BraceletTextTest extends TestCase
     {
         $result = braceletText(15, 1, [10], 10, 0, 'ru');
         $this->assertStringContainsString('0 мм допуск', $result);
+    }
+
+    /**
+     * Проверка корректности на больших значениях параметров,
+     * имитируя длинный многооборотный браслет.
+     */
+    public function testLargeValues(): void
+    {
+        $result = braceletText(20, 100, [10, 8, 6], 10, 5, 'ru');
+
+        $this->assertSame(
+            'Обхват 20 см → 833 бусин Ø10 мм и 834 бусин Ø8 мм и 833 бусин Ø6 мм + 5 мм допуск + 10 мм крепление',
+            $result
+        );
     }
 }
