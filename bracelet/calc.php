@@ -50,10 +50,11 @@ function braceletText(
     $rest = $rough % count($pattern);
 
     // Формируем итоговый массив бусин
-    $beads = array_merge(
-        ...array_fill(0, $blocks, $pattern),
-        ...array_slice($pattern, 0, $rest)
-    );
+    // Сначала собираем массив повторов паттерна, затем добавляем остаток
+    // и разворачиваем получившийся массив при слиянии
+    $beadChunks = array_fill(0, $blocks, $pattern);
+    $beadChunks[] = array_slice($pattern, 0, $rest);
+    $beads = array_merge(...$beadChunks);
 
     // Удаляем последнюю бусину, если её диаметр почти совпадает с размером магнита
     for ($i = count($beads) - 1; $i >= 0; $i--) {
@@ -82,7 +83,9 @@ function braceletText(
     foreach ($sizes as $d => $n) {
         $word = $lang === 'en' ? 'beads' : 'бусин';
         // Формируем фрагмент описания количества и диаметра
-        $parts[] = "$n $word Ø{$d} мм";
+        // Используем фигурные скобки вокруг переменных, чтобы избежать
+        // проблем с символами пробелов в строке
+        $parts[] = "{$n} {$word} Ø{$d} мм";
     }
 
     // Объединяем фрагменты описания в строку

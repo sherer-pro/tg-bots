@@ -1,0 +1,6 @@
+{
+    "name": "tg-bots/project",
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    }
+}
