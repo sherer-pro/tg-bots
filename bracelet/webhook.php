@@ -14,19 +14,42 @@ $tokenValid = $secret !== ''
 
 // Проверяем, что запрос пришёл от Telegram (по токену или IP)
 if (!$tokenValid && !isTelegramIP($remoteIp)) {
-    error_log('Недопустимый запрос: IP ' . $remoteIp . ', токен: ' . ($headers['X-Telegram-Bot-Api-Secret-Token'] ?? '')); // логируем попытку
+    // Записываем информацию о недопустимом запросе в лог
+    logError('Недопустимый запрос: IP ' . $remoteIp . ', токен: ' . ($headers['X-Telegram-Bot-Api-Secret-Token'] ?? ''));
     http_response_code(403);
     exit;
 }
 
-$update = json_decode(file_get_contents('php://input'), true);
-if (!isset($update['message'])) exit;
+// Считываем тело запроса и пытаемся декодировать JSON
+$body   = file_get_contents('php://input');
+$update = json_decode($body, true);
+if ($update === null && json_last_error() !== JSON_ERROR_NONE) {
+    // Если JSON некорректен, фиксируем это и возвращаем 400
+    logError('Некорректный JSON во входящем запросе: ' . $body);
+    http_response_code(400);
+    exit;
+}
+if (!isset($update['message'])) {
+    exit;
+}
 $msg    = $update['message'];
 $chatId = $msg['chat']['id'];
 
-$pdo = new PDO(DB_DSN, DB_USER, DB_PASSWORD, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-]);
+try {
+    // Пытаемся установить соединение с базой данных
+    $pdo = new PDO(DB_DSN, DB_USER, DB_PASSWORD, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    ]);
+} catch (PDOException $e) {
+    // При ошибке подключения уведомляем пользователя и логируем детали
+    $userLang = $msg['from']['language_code'] ?? 'ru';
+    $text     = $userLang === 'en'
+        ? 'Database connection error. Please try again later.'
+        : 'Ошибка подключения к базе данных. Попробуй позже.';
+    logError('Ошибка подключения к БД: ' . $e->getMessage());
+    send($text, $chatId);
+    exit;
+}
 
 if (isset($msg['text']) && $msg['text'] === '/start') {
     $kb = [
@@ -46,12 +69,27 @@ if (isset($msg['text']) && $msg['text'] === '/start') {
 }
 
 if (isset($msg['web_app_data']['data'])) {
-    $d    = json_decode($msg['web_app_data']['data'], true);
+    // Декодируем данные web_app и проверяем корректность JSON
+    $raw = $msg['web_app_data']['data'];
+    $d   = json_decode($raw, true);
+    if ($d === null && json_last_error() !== JSON_ERROR_NONE) {
+        // При некорректном JSON фиксируем ошибку и прекращаем обработку
+        logError('Некорректный JSON в web_app_data: ' . $raw);
+        $userLang = $msg['from']['language_code'] ?? 'ru';
+        $text     = $userLang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
+        if (!send($text, $chatId)) {
+            $fallback = $userLang === 'en'
+                ? 'Failed to send message. Try again later.'
+                : 'Не удалось отправить сообщение. Попробуй позже.';
+            send($fallback, $chatId);
+        }
+        exit;
+    }
     $lang = $d['lang'] ?? 'ru';
 
     // Проверяем структуру и типы данных
     if (!isValidWebAppData($d)) {
-        error_log('Невалидные web_app_data: ' . json_encode($msg['web_app_data'], JSON_UNESCAPED_UNICODE));
+        logError('Невалидные web_app_data: ' . json_encode($msg['web_app_data'], JSON_UNESCAPED_UNICODE));
         $text = $lang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
         // Уведомляем пользователя о неверных данных и проверяем успешность отправки
         if (!send($text, $chatId)) {
@@ -73,14 +111,16 @@ if (isset($msg['web_app_data']['data'])) {
             $lang
         );
 
-        $stmt = $pdo->prepare('INSERT INTO log
-            (tg_user_id,wrist_cm,wraps,pattern,magnet_mm,tolerance_mm,result_text)
-            VALUES (?,?,?,?,?,?,?)');
+        $stmt = $pdo->prepare('INSERT INTO log'
+            . ' (tg_user_id,wrist_cm,wraps,pattern,magnet_mm,tolerance_mm,result_text)'
+            . ' VALUES (?,?,?,?,?,?,?)');
         $stmt->execute([
             $msg['from']['id'], $d['wrist_cm'], $d['wraps'],
             $d['pattern'], $d['magnet_mm'], $d['tolerance_mm'], $text
         ]);
     } catch (\Throwable $e) {
+        // Логируем детали исключения и отправляем понятное сообщение пользователю
+        logError('Ошибка при выполнении SQL: ' . $e->getMessage());
         $text = $lang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
     }
     // Отправляем результат пользователю и уведомляем о сбое при необходимости
@@ -117,7 +157,8 @@ function send($text, $chat, $extra = []) {
 
     // Проверяем наличие ошибок на уровне cURL
     if ($response === false) {
-        error_log('Ошибка cURL: ' . curl_error($ch));
+        // Логируем ошибку уровня cURL и прекращаем отправку
+        logError('Ошибка cURL: ' . curl_error($ch));
         curl_close($ch);
         return false;
     }
@@ -127,7 +168,8 @@ function send($text, $chat, $extra = []) {
 
     // Анализируем HTTP-статус ответа
     if ($httpCode < 200 || $httpCode >= 300) {
-        error_log('Ошибка HTTP: статус ' . $httpCode . '; ответ: ' . $response);
+        // Фиксируем в логах некорректный HTTP-статус и тело ответа
+        logError('Ошибка HTTP: статус ' . $httpCode . '; ответ: ' . $response);
         return false;
     }
 
@@ -218,4 +260,19 @@ function ipInRange(string $ip, string $cidr): bool {
     $mask       = -1 << (32 - (int)$mask);
     $subnetLong &= $mask;
     return ($ipLong & $mask) === $subnetLong;
+}
+
+/**
+ * Записывает сообщение об ошибке в файл логов.
+ *
+ * Каждая запись дополняется временной меткой в формате ISO 8601,
+ * что облегчает анализ последовательности событий.
+ *
+ * @param string $message Текст ошибки.
+ *
+ * @return void
+ */
+function logError(string $message): void {
+    $time = date('c'); // Текущее время в удобочитаемом формате
+    error_log("[$time] $message\n", 3, LOG_FILE);
 }
