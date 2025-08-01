@@ -1,6 +1,7 @@
 # Logs
 logs/
 *.log
+!bracelet/logs/
 
 # dotenv environment variables file
 .env

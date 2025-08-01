@@ -69,3 +69,13 @@ define('API_URL', $_ENV['API_URL'] ?? getenv('API_URL') ?: 'https://api.telegram
  */
 define('WEBAPP_URL', $_ENV['WEBAPP_URL'] ?? getenv('WEBAPP_URL') ?: 'https://' . HOST . '/bracelet/webapp/index.html');
 
+/**
+ * Путь к файлу логов приложения.
+ *
+ * Лог хранится в каталоге `bracelet/logs` и используется для записи
+ * детальной информации об ошибках, чтобы не засорять стандартный вывод.
+ *
+ * @var string
+ */
+define('LOG_FILE', __DIR__ . '/logs/app.log');
+
