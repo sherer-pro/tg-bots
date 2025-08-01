@@ -1,6 +1,8 @@
 <?php
-require 'config.php';
-require 'calc.php';
+require_once 'config.php';
+require_once 'calc.php';
+
+if (!defined('WEBHOOK_LIB')):
 
 // Получаем заголовки и IP-адрес отправителя
 $headers  = function_exists('getallheaders') ? getallheaders() : [];
@@ -131,6 +133,7 @@ if (isset($msg['web_app_data']['data'])) {
         send($fallback, $chatId);
     }
 }
+endif;
 
 /**
  * Отправляет сообщение пользователю Telegram через метод sendMessage.
@@ -181,7 +184,15 @@ function send($text, $chat, $extra = []) {
 }
 
 /**
- * Проверяет структуру и типы данных, полученных от web_app.
+ * Проверяет структуру и корректность данных, поступивших из web_app.
+ *
+ * В процессе проверки выполняется:
+ * - наличие всех обязательных полей;
+ * - соответствие типов значений ожиданиям;
+ * - контроль диапазонов числовых параметров
+ *   (например, обхват запястья < 100 см);
+ * - ограничение длины строки с паттерном и числа элементов
+ *   после `explode`.
  *
  * @param mixed $d Данные из web_app_data.
  *
@@ -207,18 +218,46 @@ function isValidWebAppData($d): bool {
         return false;
     }
 
+    // Ограничения для числовых значений: все значения должны быть
+    // положительными и находиться в разумных пределах.
+    $wrist     = (float)$d['wrist_cm'];
+    $magnet    = (float)$d['magnet_mm'];
+    $tolerance = (float)$d['tolerance_mm'];
+    $wraps     = (int)$d['wraps'];
+
+    if ($wrist <= 0 || $wrist >= 100) {
+        return false; // обхват должен быть в диапазоне (0, 100)
+    }
+    if ($magnet <= 0 || $magnet >= 100) {
+        return false; // размеры магнита измеряются в мм, ограничим 0..100
+    }
+    if ($tolerance <= 0 || $tolerance >= 100) {
+        return false; // допуск по длине также ограничен
+    }
+    if ($wraps <= 0 || $wraps > 10) {
+        return false; // число витков должно быть положительным и не слишком большим
+    }
+
     if (!is_string($d['pattern']) || $d['pattern'] === '') {
+        return false;
+    }
+    // Ограничиваем длину строки паттерна и число элементов
+    if (mb_strlen($d['pattern']) > 100) {
         return false;
     }
 
     $parts = array_map('trim', explode(',', $d['pattern']));
-    if (empty($parts)) {
+    if (empty($parts) || count($parts) > 20) {
         return false;
     }
 
     foreach ($parts as $p) {
         if (!is_numeric($p)) {
             return false;
+        }
+        $val = (float)$p;
+        if ($val <= 0 || $val >= 100) {
+            return false; // каждый размер бусины в мм должен быть в пределах
         }
     }
 
