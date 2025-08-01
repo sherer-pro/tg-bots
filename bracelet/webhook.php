@@ -288,6 +288,11 @@ function ipInRange(string $ip, string $cidr): bool {
  * @return void
  */
 function logError(string $message): void {
+    $dir = dirname(LOG_FILE); // Каталог, где хранится лог
+    if (!is_dir($dir)) { // Проверяем существование каталога
+        mkdir($dir, 0777, true); // Создаём каталог рекурсивно при необходимости
+    }
     $time = date('c'); // Текущее время в удобочитаемом формате
+    // Записываем сообщение в лог-файл
     error_log("[$time] $message\n", 3, LOG_FILE);
 }
