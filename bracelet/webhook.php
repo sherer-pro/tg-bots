@@ -133,13 +133,17 @@ if (isset($msg['web_app_data']['data'])) {
 }
 
 /**
- * Отправляет сообщение пользователю Telegram.
+ * Отправляет сообщение пользователю Telegram через метод sendMessage.
+ * Использует HTTP POST‑запрос к Bot API. При сетевых сбоях или
+ * отрицательном HTTP‑статусе функция записывает ошибку в лог и
+ * возвращает `false`, исключения не выбрасывает.
  *
- * @param string     $text  Текст сообщения.
- * @param int|string $chat  Идентификатор чата.
- * @param array      $extra Дополнительные параметры запроса.
+ * @param string     $text  Текст отправляемого сообщения.
+ * @param int|string $chat  Идентификатор чата или имя пользователя.
+ * @param array      $extra Дополнительные поля запроса,
+ *                          например `reply_markup`.
  *
- * @return bool true, если запрос к Telegram API выполнен успешно
+ * @return bool `true` в случае успешной отправки, иначе `false`.
  */
 function send($text, $chat, $extra = []) {
     $url  = API_URL . 'sendMessage';
