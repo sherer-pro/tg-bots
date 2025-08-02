@@ -55,6 +55,7 @@ jobs:
         run: |
           rsync -a --delete \
                 --exclude='.git' \
+                --exclude='.gitignore' \
                 --exclude='.github' \
                 --exclude='LICENSE' \
                 --exclude='README.md' \
@@ -64,6 +65,10 @@ jobs:
                 --exclude='tests/' \
                 --delete-excluded \
                 "$GITHUB_WORKSPACE"/  "$APP_PATH"/
+          
+          - name: Copy local .env
+            run: |
+              cp /home/sherer/env/.env.bracelet "$APP_PATH/.env.bracelet"
       # -- 3.6 Telegram --------------------------------------------------
       - name: Notify Telegram
         if: always()
