@@ -40,7 +40,7 @@ function isTelegramIP(string $ip): bool {
  * @return bool true, если адрес попадает в диапазон; иначе false.
  */
 function ipInRange(string $ip, string $cidr): bool {
-    if (strpos($cidr, '/') === false) {
+    if (!str_contains($cidr, '/')) {
         return false; // Некорректный формат диапазона
     }
 
