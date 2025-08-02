@@ -61,7 +61,6 @@ jobs:
                 --exclude='README.md' \
                 --exclude='phpunit.xml' \
                 --exclude='.env.example' \
-                --exclude='.env.bracelet' \
                 --exclude='tests/' \
                 --delete-excluded \
                 "$GITHUB_WORKSPACE"/  "$APP_PATH"/
