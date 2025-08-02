@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 require 'config.php';
-require 'calc.php';
+require_once 'calc.php'; // Подключаем функции расчёта браслета
 // Функции проверки IP-адресов Telegram вынесены в отдельный файл,
 // чтобы их можно было переиспользовать и тестировать изолированно.
-require __DIR__ . '/telegram_ip.php';
+require_once __DIR__ . '/telegram_ip.php'; // Подключаем функции проверки IP
 
 if (!defined('WEBHOOK_LIB')):
 

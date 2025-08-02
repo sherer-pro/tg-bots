@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/../loadEnv.php'; // Подключаем функцию загрузки .env-файлов
+loadBotEnv('bracelet'); // Загружаем переменные из `.env.bracelet`
+
 /**
  * Токен Telegram-бота.
  *
