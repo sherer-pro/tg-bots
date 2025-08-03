@@ -165,10 +165,19 @@ endif;
 
 /**
  * Отправляет сообщение пользователю Telegram через метод sendMessage.
-
- * Использует HTTP POST-запрос к Bot API. При сетевых сбоях или
- * отрицательном HTTP-статусе функция записывает ошибку в лог и
- * возвращает `false`, исключения не выбрасывает.
+ *
+ * Использует HTTP POST-запрос к Bot API. После получения ответа и
+ * проверки HTTP-кода функция декодирует JSON и анализирует флаг `ok`.
+ * При сетевых сбоях, отрицательном HTTP-статусе, некорректном JSON или
+ * `ok = false` функция фиксирует событие в логе и возвращает `false`,
+ * исключения не выбрасывает.
+ *
+ * Возможные причины возврата `false`:
+ * - ошибка cURL (например, таймаут соединения);
+ * - HTTP-код вне диапазона 2xx;
+ * - некорректный JSON в ответе Bot API;
+ * - `ok` отсутствует или имеет значение `false` (сообщение берётся из
+ *   поля `description`).
  *
  * @param string     $text  Текст отправляемого сообщения.
  * @param int|string $chat  Идентификатор чата или имя пользователя.
@@ -214,7 +223,23 @@ function send($text, $chat, $extra = []) {
         return false;
     }
 
-    return true;
+    // Декодируем JSON-ответ Telegram
+    $decoded = json_decode($response, true);
+    if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+        // Логируем некорректный JSON и прекращаем выполнение
+        logError('Некорректный JSON в ответе API: ' . $response);
+        return false;
+    }
+
+    // Проверяем наличие и значение флага `ok`
+    if (!isset($decoded['ok']) || $decoded['ok'] === false) {
+        // Сохраняем описание ошибки от Telegram, если оно присутствует
+        $desc = $decoded['description'] ?? 'неизвестная ошибка';
+        logError('Ошибка API Telegram: ' . $desc);
+        return false;
+    }
+
+    return true; // Всё прошло успешно
 }
 
 /**
