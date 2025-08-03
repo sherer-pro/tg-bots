@@ -15,7 +15,8 @@ final class WebhookValidationTest extends TestCase
     private array $baseData = [
         'wrist_cm'     => 16,
         'wraps'        => 2,
-        'pattern'      => '10,8',
+        // Узор задаётся числами, разделёнными точкой с запятой
+        'pattern'      => '10;8',
         'magnet_mm'    => 10,
         'tolerance_mm' => 5,
         'lang'         => 'ru',
@@ -77,7 +78,7 @@ final class WebhookValidationTest extends TestCase
     public function testRejectsTooManyPatternItems(): void
     {
         $data = $this->baseData;
-        $data['pattern'] = implode(',', array_fill(0, 25, '1'));
+        $data['pattern'] = implode(';', array_fill(0, 25, '1'));
         $this->assertFalse(isValidWebAppData($data));
     }
 }

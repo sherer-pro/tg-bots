@@ -142,10 +142,29 @@ if (isset($msg['web_app_data']['data'])) {
     }
 
     try {
+        // Приводим строку узора к стандартному виду:
+        // 1. убираем все пробелы, чтобы пользователь мог вводить
+        //    значения через пробел по привычке;
+        // 2. заменяем запятые в дробной части на точки, так как
+        //    далее в расчётах используются числа с точкой;
+        // 3. элементы узора должны быть разделены точкой с запятой,
+        //    чтобы разделитель не конфликтовал с десятичной запятой.
+        $patternStr = str_replace(' ', '', str_replace(',', '.', $d['pattern']));
+
+        /**
+         * Массив диаметров бусин, заданный пользователем.
+         * Каждое значение приводится к float для дальнейших вычислений.
+         *
+         * @var float[] $pattern
+         */
+        $pattern = array_map('floatval', explode(';', $patternStr));
+
+        // Формируем текстовый результат расчёта браслета на основании
+        // введённых параметров и преобразованного узора
         $text = braceletText(
             (float)$d['wrist_cm'],
             (int)  $d['wraps'],
-            array_map('floatval', explode(',', $d['pattern'])),
+            $pattern,
             (float)$d['magnet_mm'],
             (float)$d['tolerance_mm'],
             $lang
@@ -310,12 +329,15 @@ function isValidWebAppData($d): bool {
     if (!is_string($d['pattern']) || $d['pattern'] === '') {
         return false;
     }
-    // Ограничиваем длину строки паттерна и число элементов
+    // Ограничиваем длину строки паттерна
     if (mb_strlen($d['pattern']) > 100) {
         return false;
     }
 
-    $parts = array_map('trim', explode(',', $d['pattern']));
+    // Удаляем пробелы и приводим запятые в дробной части к точкам,
+    // после чего делим строку по точкам с запятой на отдельные элементы узора
+    $patternStr = str_replace(' ', '', str_replace(',', '.', $d['pattern']));
+    $parts      = array_map('trim', explode(';', $patternStr));
     if (empty($parts) || count($parts) > 20) {
         return false;
     }
