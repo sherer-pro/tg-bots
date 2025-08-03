@@ -100,5 +100,5 @@ define('WEBAPP_URL', $_ENV['WEBAPP_URL'] ?? getenv('WEBAPP_URL') ?: 'https://' .
  *
  * @var string
  */
-define('LOG_FILE', __DIR__ . '/logs/app.log');
+const LOG_FILE = __DIR__ . '/logs/app.log';
 
