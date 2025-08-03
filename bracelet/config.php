@@ -3,11 +3,18 @@ require_once __DIR__ . '/../loadEnv.php'; // Подключаем функцию
 loadBotEnv('bracelet'); // Загружаем переменные из `.env.bracelet`
 
 /**
- * Токен Telegram-бота.
+ * Токен Telegram-бота. Обязательное значение.
  *
  * @var string
+ *
+ * @throws RuntimeException Если переменная окружения не задана.
  */
-define('BOT_TOKEN', $_ENV['BOT_TOKEN'] ?? getenv('BOT_TOKEN') ?: '');
+$botToken = $_ENV['BOT_TOKEN'] ?? getenv('BOT_TOKEN');
+if ($botToken === false || $botToken === null || $botToken === '') {
+    // Без токена бот не сможет обращаться к Telegram API
+    throw new RuntimeException('Переменная окружения BOT_TOKEN не задана');
+}
+define('BOT_TOKEN', $botToken);
 
 /**
  * Хост, на котором размещено веб-приложение.
@@ -71,7 +78,7 @@ $dbPort = $_ENV['DB_PORT'] ?? getenv('DB_PORT') ?: '5432';
 define('DB_DSN', $_ENV['DB_DSN'] ?? getenv('DB_DSN') ?: 'pgsql:host=' . $dbHost . ';port=' . $dbPort . ';dbname=' . DB_NAME);
 
 /**
- * Базовый URL для запросов к Telegram API.
+ * Базовый URL для запросов к Telegram API. Значение обязательно.
  *
  * @var string
  */
