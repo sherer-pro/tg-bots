@@ -29,15 +29,15 @@
     const txt = {
         ru: {
             ttl:'Параметры', wrist:'Обхват запястья, см',
-            wraps:'Оборотов', pattern:'Узор (через запятую, мм)',
+            wraps:'Оборотов', pattern:'Узор (через точку с запятой, мм)',
             mag:'Магнит, мм', tol:'Допуск, мм', btn:'Рассчитать',
-            err:'Заполни все поля корректно (узор: числа через запятую)'
+            err:'Заполни все поля корректно (узор: числа через точку с запятой)'
         },
         en: {
             ttl:'Parameters', wrist:'Wrist, cm',
-            wraps:'Wraps', pattern:'Pattern (comma‑sep, mm)',
+            wraps:'Wraps', pattern:'Pattern (semicolon‑sep, mm)',
             mag:'Magnet, mm', tol:'Slack, mm', btn:'Calculate',
-            err:'Please fill all fields correctly (pattern: numbers separated by commas)'
+            err:'Please fill all fields correctly (pattern: numbers separated by semicolons)'
         }
     }[lang];
 
@@ -45,7 +45,7 @@
     document.getElementById('ttl').textContent = txt.ttl;
     document.getElementById('l1').innerHTML    = `${txt.wrist} <input name="wrist_cm" type="number" step="0.1" required>`;
     document.getElementById('l2').innerHTML    = `${txt.wraps} <input name="wraps" type="number" min="1" required>`;
-    document.getElementById('l3').innerHTML    = `${txt.pattern} <input name="pattern" value="10,10,10,8" required>`;
+    document.getElementById('l3').innerHTML    = `${txt.pattern} <input name="pattern" value="10;10;10;8" required>`;
     document.getElementById('l4').innerHTML    = `${txt.mag} <input name="magnet_mm" value="10" required>`;
     document.getElementById('l5').innerHTML    = `${txt.tol} <input name="tolerance_mm" value="5" required>`;
     document.getElementById('btn').textContent = txt.btn;
@@ -63,10 +63,10 @@
         /**
          * Проверяем корректность введённых данных.
          * Регулярное выражение разрешает только числа,
-         * разделённые одиночными запятыми, с опциональной дробной частью
-         * после точки или запятой.
+         * разделённые точкой с запятой. В дробной части допускаются
+         * как точки, так и запятые.
          */
-        const ok = /^\d+(?:[.,]\d+)?(?:,\d+(?:[.,]\d+)?)*$/.test(data.pattern)
+        const ok = /^\d+(?:[.,]\d+)?(?:;\d+(?:[.,]\d+)?)*$/.test(data.pattern)
             && +data.wrist_cm>0 && +data.wraps>0;
 
         if (!ok) {
