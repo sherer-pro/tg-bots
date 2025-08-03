@@ -18,6 +18,7 @@ define('BOT_TOKEN', $botToken);
 
 /**
  * Хост, на котором размещено веб-приложение.
+ * Необходим для корректного формирования ссылок мини‑аппа.
  *
  * @var string
  */
@@ -87,9 +88,23 @@ define('API_URL', $_ENV['API_URL'] ?? getenv('API_URL') ?: 'https://api.telegram
 /**
  * URL веб-приложения.
  *
+ * Формируется из переменной окружения `WEBAPP_URL` или из `HOST` и относительного
+ * пути к мини-приложению. Если `HOST` не указан, генерировать корректный URL
+ * невозможно, поэтому выбрасывается исключение.
+ *
  * @var string
+ *
+ * @throws RuntimeException Если переменная окружения `HOST` не задана.
  */
-define('WEBAPP_URL', $_ENV['WEBAPP_URL'] ?? getenv('WEBAPP_URL') ?: 'https://' . HOST . '/bracelet/webapp/index.html');
+$webappUrl = $_ENV['WEBAPP_URL'] ?? getenv('WEBAPP_URL');
+if ($webappUrl === false || $webappUrl === null || $webappUrl === '') {
+    if (HOST === '') {
+        throw new RuntimeException('Переменная окружения HOST не задана');
+    }
+    // Формируем URL из хоста и стандартного пути к мини-приложению
+    $webappUrl = 'https://' . HOST . '/bracelet/webapp/index.html';
+}
+define('WEBAPP_URL', $webappUrl);
 
 /**
  * Путь к файлу логов приложения.
