@@ -92,22 +92,31 @@ define('API_URL', $_ENV['API_URL'] ?? getenv('API_URL') ?: 'https://api.telegram
 /**
  * URL веб-приложения.
  *
- * Формируется из переменной окружения `WEBAPP_URL` или из `HOST` и относительного
- * пути к мини-приложению. Если `HOST` не указан, генерировать корректный URL
- * невозможно, поэтому выбрасывается исключение.
+ * Формируется из переменной окружения `WEBAPP_URL`, либо, при её отсутствии,
+ * из `HOST` или `$_SERVER['HTTP_HOST']` и относительного пути к мини-приложению.
+ * Если определить хост не удаётся, генерировать корректный URL невозможно,
+ * поэтому выбрасывается исключение.
  *
  * @var string
  *
- * @throws RuntimeException Если переменная окружения `HOST` не задана.
+ * @throws RuntimeException Если определить хост не удалось.
  */
 $webappUrl = $_ENV['WEBAPP_URL'] ?? getenv('WEBAPP_URL');
 if ($webappUrl === false || $webappUrl === null || $webappUrl === '') {
-    if (HOST === '') {
-        logError('Отсутствует переменная окружения HOST');
-        throw new RuntimeException('Переменная окружения HOST не задана');
+    // Пытаемся получить хост из переменной окружения или из заголовка HTTP_HOST
+    $host = HOST;
+    if ($host === '') {
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if ($host !== '') {
+            // Сообщаем в лог, что используем HTTP_HOST вместо переменной окружения
+            logError('Переменная окружения HOST не задана. Используем значение $_SERVER["HTTP_HOST"].');
+        } else {
+            logError('Не удалось определить хост: переменная окружения HOST и $_SERVER["HTTP_HOST"] отсутствуют.');
+            throw new RuntimeException('Не удалось определить хост для WEBAPP_URL');
+        }
     }
-    // Формируем URL из хоста и стандартного пути к мини-приложению
-    $webappUrl = 'https://' . HOST . '/bracelet/webapp/index.html';
+    // Формируем URL из найденного хоста и стандартного пути к мини-приложению
+    $webappUrl = 'https://' . $host . '/bracelet/webapp/index.html';
 }
 define('WEBAPP_URL', $webappUrl);
 
