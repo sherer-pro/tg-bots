@@ -53,18 +53,25 @@ if (!defined('WEBHOOK_LIB')):
 
 // Получаем заголовки и определяем IP-адрес отправителя
 $headers  = function_exists('getallheaders') ? getallheaders() : [];
+/**
+ * Приводим имена заголовков к нижнему регистру, чтобы исключить зависимость
+ * от регистра, в котором веб-сервер возвращает заголовки. Это обеспечивает
+ * корректный доступ к значениям при последующей проверке токена и других
+ * операций с заголовками.
+ */
+$headers  = array_change_key_case($headers, CASE_LOWER);
 $remoteIp = resolveRemoteIp($headers, $_SERVER);
 
 // Секретный токен, заданный в переменных окружения
 $secret = $_ENV['WEBHOOK_SECRET'] ?? getenv('WEBHOOK_SECRET') ?: '';
 $tokenValid = $secret !== ''
-    && isset($headers['X-Telegram-Bot-Api-Secret-Token'])
-    && hash_equals($secret, $headers['X-Telegram-Bot-Api-Secret-Token']);
+    && isset($headers['x-telegram-bot-api-secret-token'])
+    && hash_equals($secret, $headers['x-telegram-bot-api-secret-token']);
 
 // Проверяем, что запрос пришёл от Telegram (по токену или IP)
 if (!$tokenValid && !isTelegramIP($remoteIp)) {
-    // Записываем информацию о недопустимом запросе в лог
-    logError('Недопустимый запрос: IP ' . $remoteIp . ', токен: ' . ($headers['X-Telegram-Bot-Api-Secret-Token'] ?? ''));
+    // Записываем информацию о недопустимом запросе в лог, включая токен из заголовков
+    logError('Недопустимый запрос: IP ' . $remoteIp . ', токен: ' . ($headers['x-telegram-bot-api-secret-token'] ?? ''));
     http_response_code(403);
     exit;
 }
