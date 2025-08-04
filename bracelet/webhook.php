@@ -62,11 +62,27 @@ $headers  = function_exists('getallheaders') ? getallheaders() : [];
 $headers  = array_change_key_case($headers, CASE_LOWER);
 $remoteIp = resolveRemoteIp($headers, $_SERVER);
 
-// Секретный токен, заданный в переменных окружения
+/**
+ * Секретный токен, заданный в переменных окружения.
+ * Отсутствие значения допустимо только в тестовой среде.
+ *
+ * @var string $secret
+ */
 $secret = $_ENV['WEBHOOK_SECRET'] ?? getenv('WEBHOOK_SECRET') ?: '';
-$tokenValid = $secret !== ''
-    && isset($headers['x-telegram-bot-api-secret-token'])
-    && hash_equals($secret, $headers['x-telegram-bot-api-secret-token']);
+
+if ($secret === '') {
+    // В тестовом окружении значение токена может отсутствовать.
+    // В этом случае проверку токена отключаем, чтобы было удобно отлаживать
+    // бота без передачи дополнительных заголовков.
+    // ⚠ В боевой среде отключение проверки позволит злоумышленникам
+    // отправлять поддельные запросы к нашему webhook и выполнять
+    // несанкционированные операции.
+    $tokenValid = true;
+} else {
+    // Сравниваем ожидаемый токен с тем, что пришёл в запросе от Telegram.
+    $tokenValid = isset($headers['x-telegram-bot-api-secret-token'])
+        && hash_equals($secret, $headers['x-telegram-bot-api-secret-token']);
+}
 
 // Проверяем, что запрос пришёл от Telegram (по токену или IP)
 if (!$tokenValid && !isTelegramIP($remoteIp)) {
