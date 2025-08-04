@@ -73,25 +73,35 @@ function braceletText(
     // Разница между требуемой длиной и текущей
     $delta = $Lt - $currentLen;
 
-    if ($delta < -2) {
-        // Браслет длиннее допустимого. Чтобы понять,
-        // сколько элементов убрать, делим излишек длины
-        // на средний диаметр бусины. Округляем вверх,
-        // чтобы гарантированно удалить достаточно бусин.
-        $remove = (int) ceil(($currentLen - ($Lt + 2)) / $avg);
-        if ($remove > 0) {
-            $beads = array_slice($beads, 0, count($beads) - $remove);
+    // Максимальное количество попыток корректировки, чтобы избежать бесконечного цикла
+    $maxIterations = 10;
+
+    // Повторяем корректировку длины браслета, пока отклонение не окажется в пределах допуска
+    for ($i = 0; $i < $maxIterations && abs($delta) > 2; $i++) {
+        if ($delta < -2) {
+            // Браслет длиннее допустимого. Чтобы понять,
+            // сколько элементов убрать, делим излишек длины
+            // на средний диаметр бусины. Округляем вверх,
+            // чтобы гарантированно удалить достаточно бусин.
+            $remove = (int) ceil(($currentLen - ($Lt + 2)) / $avg);
+            if ($remove > 0) {
+                $beads = array_slice($beads, 0, count($beads) - $remove);
+            }
+        } elseif ($delta > 2) {
+            // Браслет короче допустимого. Недостающую длину
+            // делим на средний диаметр бусины и округляем вверх,
+            // получая количество элементов для добавления.
+            $add = (int) ceil(($Lt - 2 - $currentLen) / $avg);
+            if ($add > 0) {
+                $addChunks = array_fill(0, intdiv($add, count($pattern)), $pattern);
+                $addChunks[] = array_slice($pattern, 0, $add % count($pattern));
+                $beads = array_merge($beads, ...$addChunks);
+            }
         }
-    } elseif ($delta > 2) {
-        // Браслет короче допустимого. Недостающую длину
-        // делим на средний диаметр бусины и округляем вверх,
-        // получая количество элементов для добавления.
-        $add = (int) ceil(($Lt - 2 - $currentLen) / $avg);
-        if ($add > 0) {
-            $addChunks = array_fill(0, intdiv($add, count($pattern)), $pattern);
-            $addChunks[] = array_slice($pattern, 0, $add % count($pattern));
-            $beads = array_merge($beads, ...$addChunks);
-        }
+
+        // Повторный расчёт текущей длины и отклонения после корректировки
+        $currentLen = $len($beads);
+        $delta = $Lt - $currentLen;
     }
 
     // Подсчитываем количество бусин каждого диаметра
