@@ -43,4 +43,18 @@ final class TelegramIPTest extends TestCase
         $this->assertTrue(ipInRange('2001:67c:4e8:ff::1', '2001:67c:4e8::/48'));
         $this->assertFalse(ipInRange('2001:67c:4e9::1', '2001:67c:4e8::/48'));
     }
+
+    /**
+     * Неверный префикс (выходящий за пределы адреса) должен приводить к false.
+     *
+     * @return void
+     */
+    public function testInvalidPrefix(): void
+    {
+        // Префикс 40 для IPv4 превышает допустимые 32 бита
+        $this->assertFalse(ipInRange('149.154.167.99', '149.154.160.0/40'));
+
+        // Префикс 129 для IPv6 превышает допустимые 128 бит
+        $this->assertFalse(ipInRange('2001:67c:4e8::1', '2001:67c:4e8::/129'));
+    }
 }
