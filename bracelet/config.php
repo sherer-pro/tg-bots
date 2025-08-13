@@ -30,8 +30,16 @@ define('HOST', $_ENV['HOST'] ?? getenv('HOST') ?: '');
  * Имя базы данных Postgres.
  *
  * @var string
+ *
+ * @throws RuntimeException Если переменная окружения не задана.
  */
-define('DB_NAME', $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: '');
+$dbName = $_ENV['DB_NAME'] ?? getenv('DB_NAME');
+if ($dbName === false || $dbName === null || $dbName === '') {
+    // Без имени базы данных невозможно установить соединение
+    logError('Отсутствует переменная окружения DB_NAME');
+    throw new RuntimeException('Переменная окружения DB_NAME не задана');
+}
+define('DB_NAME', $dbName);
 
 /**
  * Пользователь базы данных.
