@@ -37,8 +37,9 @@ function isTelegramIP(string $ip): bool {
  * @param string $ip   Проверяемый IP-адрес.
  * @param string $cidr Диапазон в формате CIDR.
  *
- * @return bool true, если адрес попадает в диапазон; иначе false.
- */
+ * @return bool true, если адрес попадает в диапазон; false, если адрес или
+ *              префикс некорректны или не соответствуют друг другу.
+*/
 function ipInRange(string $ip, string $cidr): bool {
     if (!str_contains($cidr, '/')) {
         return false; // Некорректный формат диапазона
@@ -58,9 +59,22 @@ function ipInRange(string $ip, string $cidr): bool {
         return false;
     }
 
-    $prefix = (int) $prefix;
-    $bytes  = intdiv($prefix, 8);       // Полные байты маски
-    $bits   = $prefix % 8;              // Оставшиеся биты
+    // Определяем длину IP-адреса в байтах и допустимый максимум префикса.
+    // Для IPv4 это 4 байта (32 бита), для IPv6 — 16 байт (128 бит).
+    $addrLength = strlen($ipBin);
+    $maxPrefix  = $addrLength * 8;
+
+    $prefix = (int) $prefix;            // Префикс, приведённый к целому числу
+
+    // Проверяем, что префикс находится в допустимом диапазоне
+    // (0–32 для IPv4 и 0–128 для IPv6). В противном случае дальнейшие
+    // вычисления не имеют смысла.
+    if ($prefix < 0 || $prefix > $maxPrefix) {
+        return false;
+    }
+
+    $bytes = intdiv($prefix, 8);        // Количество полных байт маски
+    $bits  = $prefix % 8;               // Число оставшихся битов
 
     // Формируем двоичную маску: сначала нужное количество байт, заполненных 1,
     // затем один байт с необходимым числом старших единичных битов и дополняем
