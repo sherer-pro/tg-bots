@@ -15,7 +15,8 @@
  *
  * @return string Описание с количеством бусин каждого размера и допуском.
  *
- * @throws InvalidArgumentException Если массив с паттерном пуст.
+ * @throws InvalidArgumentException Если массив с паттерном пуст
+ *                                  или невозможно подобрать набор бусин.
  */
 function braceletText(
     float $wristCm,
@@ -55,6 +56,15 @@ function braceletText(
     $beadChunks = array_fill(0, $blocks, $pattern);
     $beadChunks[] = array_slice($pattern, 0, $rest);
     $beads = array_merge(...$beadChunks);
+
+    // Проверяем, что после расчётов получился непустой набор бусин.
+    // Если в массиве нет ни одного элемента, значит параметры подобраны
+    // некорректно и браслет построить невозможно.
+    if (count($beads) === 0) {
+        throw new InvalidArgumentException(
+            'Невозможно подобрать набор бусин с указанными параметрами'
+        );
+    }
 
     // Удаляем последнюю бусину, если её диаметр почти совпадает с размером магнита
     for ($i = count($beads) - 1; $i >= 0; $i--) {
