@@ -26,7 +26,7 @@ function loadBotEnv(string $botName): void
     $envFile = ".env.$botName";
     $basePath = __DIR__;
 
-    // Проверяем существование файла, чтобы не получить трудноотлавливаемую ошибку от Dotenv.
+    // Проверяем существование файла, чтобы не получить трудно отлавливаемую ошибку от Dotenv.
     if (!file_exists($basePath . DIRECTORY_SEPARATOR . $envFile)) {
         throw new RuntimeException("Файл окружения {$envFile} не найден");
     }
