@@ -49,4 +49,14 @@ final class ZResolveRemoteIpTest extends TestCase
         $server  = ['REMOTE_ADDR' => '198.51.100.23'];
         $this->assertSame('198.51.100.23', resolveRemoteIp($headers, $server));
     }
+
+    /**
+     * При некорректном IP в X-Forwarded-For используется REMOTE_ADDR.
+     */
+    public function testInvalidForwardedIpFallsBackToRemoteAddr(): void
+    {
+        $headers = ['X-Forwarded-For' => '999.999.999.999'];
+        $server  = ['REMOTE_ADDR' => '198.51.100.23'];
+        $this->assertSame('198.51.100.23', resolveRemoteIp($headers, $server, true));
+    }
 }
