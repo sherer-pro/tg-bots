@@ -28,7 +28,9 @@ final class BraceletTextTest extends TestCase
      */
     public function testZeroWraps(): void
     {
-        $this->expectException(ValueError::class);
+        // Ожидаем исключение, так как число витков не может быть нулевым
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Количество витков должно быть больше нуля');
         braceletText(15, 0, [10], 10, 5, 'ru');
     }
 

@@ -15,8 +15,9 @@
  *
  * @return string Описание с количеством бусин каждого размера и допуском.
  *
- * @throws InvalidArgumentException Если массив с паттерном пуст
- *                                  или невозможно подобрать набор бусин.
+ * @throws InvalidArgumentException Если число витков не больше нуля,
+ *                                  массив с паттерном пуст или невозможно
+ *                                  подобрать набор бусин.
  */
 function braceletText(
     float $wristCm,
@@ -26,6 +27,16 @@ function braceletText(
     float $tolMm = 5,
     string $lang = 'ru'
 ): string {
+
+    /**
+     * Проверяем, что число витков положительно.
+     *
+     * @param int $wraps Количество витков браслета.
+     * @throws InvalidArgumentException если значение не больше нуля.
+     */
+    if ($wraps <= 0) {
+        throw new InvalidArgumentException('Количество витков должно быть больше нуля');
+    }
 
     // Переводим обхват запястья из сантиметров в миллиметры
     $wristMm = $wristCm * 10;
