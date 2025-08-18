@@ -24,7 +24,8 @@ final class ZResolveRemoteIpTest extends TestCase
      */
     public function testUsesForwardedForWhenPresent(): void
     {
-        $headers = ['X-Forwarded-For' => '203.0.113.5, 198.51.100.23'];
+        // Заголовки приводим к нижнему регистру так же, как это делает вызывающий код
+        $headers = ['x-forwarded-for' => '203.0.113.5, 198.51.100.23'];
         $server  = ['REMOTE_ADDR' => '198.51.100.23'];
         $this->assertSame('203.0.113.5', resolveRemoteIp($headers, $server, true));
     }
@@ -45,7 +46,8 @@ final class ZResolveRemoteIpTest extends TestCase
      */
     public function testIgnoresForwardedForWhenNotTrusted(): void
     {
-        $headers = ['X-Forwarded-For' => '203.0.113.5'];
+        // Заголовок уже нормализован к нижнему регистру
+        $headers = ['x-forwarded-for' => '203.0.113.5'];
         $server  = ['REMOTE_ADDR' => '198.51.100.23'];
         $this->assertSame('198.51.100.23', resolveRemoteIp($headers, $server));
     }
@@ -55,7 +57,8 @@ final class ZResolveRemoteIpTest extends TestCase
      */
     public function testInvalidForwardedIpFallsBackToRemoteAddr(): void
     {
-        $headers = ['X-Forwarded-For' => '999.999.999.999'];
+        // Используем намеренно некорректный IP, ключ заголовка в нижнем регистре
+        $headers = ['x-forwarded-for' => '999.999.999.999'];
         $server  = ['REMOTE_ADDR' => '198.51.100.23'];
         $this->assertSame('198.51.100.23', resolveRemoteIp($headers, $server, true));
     }
