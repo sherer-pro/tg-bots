@@ -129,60 +129,19 @@ if (!isset($update['message'])) {
 }
 $msg    = $update['message'];
 $chatId = $msg['chat']['id'];
+$userId = $msg['from']['id'];
+$userLang = $msg['from']['language_code'] ?? 'ru';
 
-// Обрабатываем команду /start, допускающую передачу дополнительного параметра
-// Используем регулярное выражение, чтобы команда считалась корректной как без аргумента,
-// так и с параметром, отделённым пробелом
-if (isset($msg['text']) && preg_match('/^\/start(?:\s|$)/', $msg['text'])) {
-    /**
-     * Параметр, переданный вместе с командой /start.
-     * Пробел между командой и параметром обязателен.
-     * Если пользователь не указал аргумент, будет возвращена пустая строка.
-     *
-     * @var string $startParam
-     */
-    // Удаляем из текста команду /start и следующее за ней пространство,
-    // оставляя только пользовательский параметр
-    $startParam = preg_replace('/^\/start\s*/', '', $msg['text']);
-    // Здесь при необходимости можно обработать $startParam (например, идентификатор реферала)
-
-    $kb = [
-        'keyboard' => [[[
-            'text' => '🧮 Calculator',
-            'web_app' => ['url' => WEBAPP_URL]
-        ]]],
-        'resize_keyboard' => true
-    ];
-    // Пытаемся отправить приветственное сообщение пользователю
-    $sent = send('Нажми кнопку, заполни форму и получи расчёт', $chatId, ['reply_markup' => json_encode($kb)]);
-    if (!$sent) {
-        // Если отправка не удалась, уведомляем пользователя отдельным сообщением
-        /**
-         * Повторная попытка отправить уведомление об ошибке.
-         *
-         * @var bool $retrySent Успех повторной отправки предупреждения
-         */
-        $retrySent = send('Не удалось отправить сообщение. Попробуй позже.', $chatId);
-        if (!$retrySent) {
-            // Фиксируем повторный сбой, чтобы отследить проблемы с доставкой приветственных сообщений
-            logError('Повторный сбой отправки приветственного сообщения');
-        }
-    }
-    exit;
-}
-
-// После обработки /start устанавливаем соединение с БД.
-// Это позволяет избежать лишнего подключения при простых командах.
+// Устанавливаем соединение с базой данных, так как оно потребуется
+// как для обработки команды /start, так и для дальнейших шагов диалога.
 try {
-    // Пытаемся установить соединение с базой данных
     /** @var PDO $pdo Подключение к базе данных */
     $pdo = new PDO(DB_DSN, DB_USER, DB_PASSWORD, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
     ]);
 } catch (PDOException $e) {
     // При ошибке подключения уведомляем пользователя и логируем детали
-    $userLang = $msg['from']['language_code'] ?? 'ru';
-    $text     = $userLang === 'en'
+    $text = $userLang === 'en'
         ? 'Database connection error. Please try again later.'
         : 'Ошибка подключения к базе данных. Попробуй позже.';
     logError('Ошибка подключения к БД: ' . $e->getMessage());
@@ -190,88 +149,198 @@ try {
     exit;
 }
 
-if (isset($msg['web_app_data']['data'])) {
-    // Декодируем данные web_app и проверяем корректность JSON
-    $raw = $msg['web_app_data']['data'];
-    $d   = json_decode($raw, true);
-    if ($d === null && json_last_error() !== JSON_ERROR_NONE) {
-        // При некорректном JSON фиксируем ошибку и прекращаем обработку
-        logError('Некорректный JSON в web_app_data: ' . $raw);
-        $userLang = $msg['from']['language_code'] ?? 'ru';
-        $text     = $userLang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
-        if (!send($text, $chatId)) {
-            $fallback = $userLang === 'en'
-                ? 'Failed to send message. Try again later.'
-                : 'Не удалось отправить сообщение. Попробуй позже.';
-            send($fallback, $chatId);
-        }
-        exit;
-    }
-    $lang = $d['lang'] ?? 'ru';
-
-    // Проверяем структуру и типы данных
-    if (!isValidWebAppData($d)) {
-        logError('Невалидные web_app_data: ' . json_encode($msg['web_app_data'], JSON_UNESCAPED_UNICODE));
-        $text = $lang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
-        // Уведомляем пользователя о неверных данных и проверяем успешность отправки
-        if (!send($text, $chatId)) {
-            $fallback = $lang === 'en'
-                ? 'Failed to send message. Try again later.'
-                : 'Не удалось отправить сообщение. Попробуй позже.';
-            send($fallback, $chatId);
-        }
-        exit;
-    }
-
+// Обрабатываем команду /start
+if (isset($msg['text']) && preg_match('/^\/start(?:\s|$)/', $msg['text'])) {
     try {
-        // Приводим строку узора к стандартному виду:
-        // 1. убираем все пробелы, чтобы пользователь мог вводить
-        //    значения через пробел по привычке;
-        // 2. заменяем запятые в дробной части на точки, так как
-        //    далее в расчётах используются числа с точкой;
-        // 3. элементы узора должны быть разделены точкой с запятой,
-        //    чтобы разделитель не конфликтовал с десятичной запятой.
-        $patternStr = str_replace(' ', '', str_replace(',', '.', $d['pattern']));
-
-        /**
-         * Массив диаметров бусин, заданный пользователем.
-         * Каждое значение приводится к float для дальнейших вычислений.
-         *
-         * @var float[] $pattern
-         */
-        $pattern = array_map('floatval', explode(';', $patternStr));
-
-        // Формируем текстовый результат расчёта браслета на основании
-        // введённых параметров и преобразованного узора
-        $text = braceletText(
-            (float)$d['wrist_cm'],
-            (int)  $d['wraps'],
-            $pattern,
-            (float)$d['magnet_mm'],
-            (float)$d['tolerance_mm'],
-            $lang
-        );
-
-        $stmt = $pdo->prepare('INSERT INTO log'
-            . ' (tg_user_id,wrist_cm,wraps,pattern,magnet_mm,tolerance_mm,result_text)'
-            . ' VALUES (?,?,?,?,?,?,?)');
-        $stmt->execute([
-            $msg['from']['id'], $d['wrist_cm'], $d['wraps'],
-            $d['pattern'], $d['magnet_mm'], $d['tolerance_mm'], $text
-        ]);
-    } catch (\Throwable $e) {
-        // Логируем детали исключения и отправляем понятное сообщение пользователю
-        logError('Ошибка при выполнении SQL: ' . $e->getMessage());
-        $text = $lang === 'en' ? 'Error in data. Try again.' : 'Ошибка в данных. Попробуй ещё раз.';
+        // Очищаем возможное предыдущее состояние пользователя и создаём новое
+        $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
+        $pdo->prepare('INSERT INTO user_state (tg_user_id, step, data) VALUES (?,1,?::jsonb)')
+            ->execute([$userId, json_encode([], JSON_UNESCAPED_UNICODE)]);
+    } catch (PDOException $e) {
+        // Логируем ошибку и уведомляем пользователя о проблеме на сервере
+        logError('Ошибка при инициализации состояния: ' . $e->getMessage());
+        $text = $userLang === 'en'
+            ? 'Server error. Try again later.'
+            : 'Ошибка сервера. Попробуй позже.';
+        send($text, $chatId);
+        exit;
     }
-    // Отправляем результат пользователю и уведомляем о сбое при необходимости
-    if (!send($text, $chatId)) {
-        $fallback = $lang === 'en'
-            ? 'Failed to send message. Try again later.'
-            : 'Не удалось отправить сообщение. Попробуй позже.';
-        send($fallback, $chatId);
-    }
+    $text = $userLang === 'en'
+        ? 'Enter wrist circumference in centimeters.'
+        : 'Введи обхват запястья в сантиметрах.';
+    send($text, $chatId);
+    exit;
 }
+
+// Пытаемся получить текущее состояние пользователя
+try {
+    $stmt = $pdo->prepare('SELECT step, data FROM user_state WHERE tg_user_id = ?');
+    $stmt->execute([$userId]);
+    /** @var array{step:int,data:string}|false $state */
+    $state = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    logError('Ошибка чтения состояния: ' . $e->getMessage());
+    $text = $userLang === 'en'
+        ? 'Server error. Try again later.'
+        : 'Ошибка сервера. Попробуй позже.';
+    send($text, $chatId);
+    exit;
+}
+
+if ($state === false) {
+    // Нет активного диалога — предлагаем начать заново
+    $text = $userLang === 'en'
+        ? 'Send /start to begin.'
+        : 'Отправь /start, чтобы начать.';
+    send($text, $chatId);
+    exit;
+}
+
+$data = json_decode($state['data'], true) ?: [];
+$step = (int)$state['step'];
+
+// Обрабатываем только текстовые сообщения, так как от пользователя
+// ожидаются числовые значения или строки с узором
+if (!isset($msg['text'])) {
+    $text = $userLang === 'en'
+        ? 'Please send a text value.'
+        : 'Пожалуйста, введи значение текстом.';
+    send($text, $chatId);
+    exit;
+}
+
+$input = trim($msg['text']);
+
+switch ($step) {
+    case 1:
+        // Шаг 1 — обхват запястья в сантиметрах
+        $val = str_replace(',', '.', $input);
+        if (!is_numeric($val) || ($v = (float)$val) <= 0 || $v >= 100) {
+            $text = $userLang === 'en'
+                ? 'Invalid value. Enter wrist circumference in centimeters.'
+                : 'Некорректный обхват. Введи число в сантиметрах.';
+            send($text, $chatId);
+            break;
+        }
+        $data['wrist_cm'] = $v;
+        saveState($pdo, $userId, 2, $data);
+        $text = $userLang === 'en'
+            ? 'How many wraps will the bracelet have?'
+            : 'Сколько будет витков?';
+        send($text, $chatId);
+        break;
+    case 2:
+        // Шаг 2 — количество витков
+        if (!ctype_digit($input) || ($v = (int)$input) <= 0 || $v > 10) {
+            $text = $userLang === 'en'
+                ? 'Invalid wraps count. Enter a positive integer not greater than 10.'
+                : 'Некорректное число витков. Введи положительное целое число не больше 10.';
+            send($text, $chatId);
+            break;
+        }
+        $data['wraps'] = $v;
+        saveState($pdo, $userId, 3, $data);
+        $text = $userLang === 'en'
+            ? 'Enter bead pattern in millimeters separated by semicolons (e.g., 10;8).'
+            : 'Введи узор: размеры бусин в мм через точку с запятой (например 10;8).';
+        send($text, $chatId);
+        break;
+    case 3:
+        // Шаг 3 — узор браслета
+        $patternStr = str_replace(' ', '', str_replace(',', '.', $input));
+        $parts = array_filter(array_map('trim', explode(';', $patternStr)), 'strlen');
+        if (empty($parts) || count($parts) > 20) {
+            $text = $userLang === 'en' ? 'Invalid pattern.' : 'Некорректный узор.';
+            send($text, $chatId);
+            break;
+        }
+        $valid = true;
+        foreach ($parts as $p) {
+            if (!is_numeric($p)) {
+                $valid = false;
+                break;
+            }
+            $pv = (float)$p;
+            if ($pv <= 0 || $pv >= 100) {
+                $valid = false;
+                break;
+            }
+        }
+        if (!$valid) {
+            $text = $userLang === 'en' ? 'Invalid pattern.' : 'Некорректный узор.';
+            send($text, $chatId);
+            break;
+        }
+        $data['pattern'] = implode(';', $parts);
+        saveState($pdo, $userId, 4, $data);
+        $text = $userLang === 'en'
+            ? 'Enter magnet size in millimeters.'
+            : 'Укажи размер магнита в миллиметрах.';
+        send($text, $chatId);
+        break;
+    case 4:
+        // Шаг 4 — размер магнита
+        $val = str_replace(',', '.', $input);
+        if (!is_numeric($val) || ($v = (float)$val) <= 0 || $v >= 100) {
+            $text = $userLang === 'en'
+                ? 'Invalid magnet size.'
+                : 'Некорректный размер магнита.';
+            send($text, $chatId);
+            break;
+        }
+        $data['magnet_mm'] = $v;
+        saveState($pdo, $userId, 5, $data);
+        $text = $userLang === 'en'
+            ? 'Enter allowable length tolerance in millimeters.'
+            : 'Введи допуск по длине в миллиметрах.';
+        send($text, $chatId);
+        break;
+    case 5:
+        // Шаг 5 — допуск по длине и финальный расчёт
+        $val = str_replace(',', '.', $input);
+        if (!is_numeric($val) || ($v = (float)$val) <= 0 || $v >= 100) {
+            $text = $userLang === 'en'
+                ? 'Invalid tolerance.'
+                : 'Некорректный допуск.';
+            send($text, $chatId);
+            break;
+        }
+        $data['tolerance_mm'] = $v;
+        $pattern = array_map('floatval', explode(';', $data['pattern']));
+        $text = braceletText(
+            (float)$data['wrist_cm'],
+            (int)$data['wraps'],
+            $pattern,
+            (float)$data['magnet_mm'],
+            (float)$data['tolerance_mm'],
+            $userLang
+        );
+        try {
+            $stmt = $pdo->prepare('INSERT INTO log (tg_user_id,wrist_cm,wraps,pattern,magnet_mm,tolerance_mm,result_text) VALUES (?,?,?,?,?,?,?)');
+            $stmt->execute([
+                $userId,
+                $data['wrist_cm'],
+                $data['wraps'],
+                $data['pattern'],
+                $data['magnet_mm'],
+                $data['tolerance_mm'],
+                $text
+            ]);
+            $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
+        } catch (PDOException $e) {
+            logError('Ошибка при сохранении результата: ' . $e->getMessage());
+        }
+        send($text, $chatId);
+        break;
+    default:
+        // Некорректный шаг — сбрасываем состояние
+        $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
+        $text = $userLang === 'en'
+            ? 'Send /start to begin.'
+            : 'Отправь /start, чтобы начать.';
+        send($text, $chatId);
+}
+
 endif;
 
 /**
@@ -337,90 +406,16 @@ function send(string $text, int|string $chat, array $extra = []): bool {
 }
 
 /**
- * Проверяет структуру и корректность данных, поступивших из web_app.
+ * Сохраняет состояние диалога пользователя в таблице `user_state`.
  *
- * В процессе проверки выполняется:
- * - наличие всех обязательных полей;
- * - соответствие типов значений ожиданиям;
- * - контроль диапазонов числовых параметров
- *   (например, обхват запястья < 100 см);
- * - ограничение длины строки с паттерном и числа элементов
- *   после `explode`.
+ * @param PDO   $pdo     Подключение к базе данных.
+ * @param int   $userId  Идентификатор пользователя Telegram.
+ * @param int   $step    Текущий шаг сценария.
+ * @param array $data    Накопленные параметры пользователя.
  *
- * @param mixed $d Данные из web_app_data.
- *
- * @return bool true, если данные валидны.
+ * @return void
  */
-function isValidWebAppData($d): bool {
-    if (!is_array($d)) {
-        return false;
-    }
-
-    $required = ['wrist_cm', 'wraps', 'pattern', 'magnet_mm', 'tolerance_mm'];
-    foreach ($required as $key) {
-        if (!array_key_exists($key, $d)) {
-            return false;
-        }
-    }
-
-    if (!is_numeric($d['wrist_cm']) || !is_numeric($d['magnet_mm']) || !is_numeric($d['tolerance_mm'])) {
-        return false;
-    }
-
-    if (!is_numeric($d['wraps'])) {
-        return false;
-    }
-
-    // Ограничения для числовых значений: все значения должны быть
-    // положительными и находиться в разумных пределах.
-    $wrist     = (float)$d['wrist_cm'];
-    $magnet    = (float)$d['magnet_mm'];
-    $tolerance = (float)$d['tolerance_mm'];
-    $wraps     = (int)$d['wraps'];
-
-    if ($wrist <= 0 || $wrist >= 100) {
-        return false; // обхват должен быть в диапазоне (0, 100)
-    }
-    if ($magnet <= 0 || $magnet >= 100) {
-        return false; // размеры магнита измеряются в мм, ограничим 0..100
-    }
-    if ($tolerance <= 0 || $tolerance >= 100) {
-        return false; // допуск по длине также ограничен
-    }
-    if ($wraps <= 0 || $wraps > 10) {
-        return false; // число витков должно быть положительным и не слишком большим
-    }
-
-    if (!is_string($d['pattern']) || $d['pattern'] === '') {
-        return false;
-    }
-    // Ограничиваем длину строки паттерна
-    if (mb_strlen($d['pattern']) > 100) {
-        return false;
-    }
-
-    // Удаляем пробелы и приводим запятые в дробной части к точкам,
-    // после чего делим строку по точкам с запятой на отдельные элементы узора
-    $patternStr = str_replace(' ', '', str_replace(',', '.', $d['pattern']));
-    $parts      = array_map('trim', explode(';', $patternStr));
-    if (empty($parts) || count($parts) > 20) {
-        return false;
-    }
-
-    foreach ($parts as $p) {
-        if (!is_numeric($p)) {
-            return false;
-        }
-        $val = (float)$p;
-        if ($val <= 0 || $val >= 100) {
-            return false; // каждый размер бусины в мм должен быть в пределах
-        }
-    }
-
-    if (isset($d['lang']) && !is_string($d['lang'])) {
-        return false;
-    }
-
-    return true;
+function saveState(PDO $pdo, int $userId, int $step, array $data): void {
+    $stmt = $pdo->prepare('UPDATE user_state SET step = ?, data = ?, updated_at = now() WHERE tg_user_id = ?');
+    $stmt->execute([$step, json_encode($data, JSON_UNESCAPED_UNICODE), $userId]);
 }
-

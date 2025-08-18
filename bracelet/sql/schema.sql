@@ -9,3 +9,10 @@ CREATE TABLE log (
                      result_text  TEXT,
                      created_at   TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE TABLE user_state (
+    tg_user_id BIGINT PRIMARY KEY,
+    step SMALLINT NOT NULL,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
