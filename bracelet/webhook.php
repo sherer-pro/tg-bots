@@ -95,6 +95,9 @@ if ($contentLengthHeader > $maxBodySize) {
 
 // Считываем тело запроса и проверяем фактический размер полученных данных.
 $body = file_get_contents('php://input');
+// Логируем тело запроса и IP-адрес отправителя сразу после чтения
+// для упрощения диагностики потенциальных проблем
+logInfo('Получено тело запроса от IP ' . $remoteIp . ': ' . $body);
 if (strlen($body) > $maxBodySize) {
     // Если реальный размер оказался больше ожидаемого, логируем инцидент
     // и возвращаем ошибку 413. Это защищает от некорректных клиентов,
@@ -104,12 +107,24 @@ if (strlen($body) > $maxBodySize) {
     exit;
 }
 
+// Перед декодированием убеждаемся, что тело запроса не пустое
+if (trim($body) === '') {
+    // Сообщаем об отсутствии данных и включаем IP-адрес отправителя в лог
+    $errorMessage = 'Пустое тело запроса';
+    logError($errorMessage . ', IP ' . $remoteIp);
+    http_response_code(400);
+    echo $errorMessage;
+    exit;
+}
+
 // Пытаемся декодировать JSON только после успешного прохождения проверки размеров
 $update = json_decode($body, true);
 if ($update === null && json_last_error() !== JSON_ERROR_NONE) {
-    // Если JSON некорректен, фиксируем это и возвращаем 400
-    logError('Некорректный JSON во входящем запросе: ' . $body);
+    // При ошибке разбора указываем детальное описание проблемы
+    $errorMessage = 'Некорректный JSON: ' . json_last_error_msg();
+    logError($errorMessage . '; данные: ' . $body . '; IP ' . $remoteIp);
     http_response_code(400);
+    echo $errorMessage;
     exit;
 }
 if (!isset($update['message'])) {
