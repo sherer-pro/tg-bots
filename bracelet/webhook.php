@@ -105,8 +105,12 @@ if ($secret === '') {
 
 // Проверяем, что запрос пришёл от Telegram (по токену или IP)
 if (!$tokenValid && !isTelegramIP($remoteIp)) {
-    // Записываем информацию о недопустимом запросе в лог, включая токен из заголовков
-    logError('Недопустимый запрос: IP ' . $remoteIp . ', токен: ' . ($headers['x-telegram-bot-api-secret-token'] ?? ''));
+    // Записываем информацию о недопустимом запросе, в лог пишется только частично скрытый токен
+    /** @var string $token Токен из заголовка запроса */
+    $token = $headers['x-telegram-bot-api-secret-token'] ?? '';
+    /** @var string $maskedToken Токен с показанными первыми четырьмя символами */
+    $maskedToken = $token !== '' ? substr($token, 0, 4) . '***' : '';
+    logError('Недопустимый запрос: IP ' . $remoteIp . ', токен: ' . $maskedToken);
     http_response_code(403);
     exit;
 }
