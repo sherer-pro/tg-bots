@@ -3,8 +3,12 @@ logs/
 *.log
 !bracelet/logs/
 
-# dotenv environment variables file
+# dotenv: файлы переменных окружения в корне
+# Игнорируем индивидуальные конфигурации ботов
 .env
+/.env.*
+# Но оставляем шаблон примера, используемый для быстрого старта
+!.env.example
 
 # datasets
 data/
