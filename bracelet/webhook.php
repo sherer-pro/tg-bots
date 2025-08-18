@@ -113,6 +113,12 @@ if ($update === null && json_last_error() !== JSON_ERROR_NONE) {
     exit;
 }
 if (!isset($update['message'])) {
+    // Логируем полное обновление, если ключ message отсутствует, чтобы
+    // можно было диагностировать источник некорректного запроса
+    logError(
+        'Некорректное обновление: поле message отсутствует. Полный JSON: '
+        . json_encode($update, JSON_UNESCAPED_UNICODE)
+    );
     exit;
 }
 $msg    = $update['message'];
