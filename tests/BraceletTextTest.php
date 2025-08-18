@@ -8,12 +8,42 @@ use PHPUnit\Framework\TestCase;
 final class BraceletTextTest extends TestCase
 {
     /**
+     * Выполняет переданную функцию, перехватывая возможные предупреждения.
+     * Если предупреждения появляются, тест завершается неудачей.
+     *
+     * @param callable $fn Вычисление, которое необходимо выполнить.
+     * @return mixed       Результат работы переданной функции.
+     */
+    private function executeWithoutWarnings(callable $fn)
+    {
+        $warnings = [];
+        set_error_handler(function (int $errno, string $errstr) use (&$warnings): bool {
+            if ($errno === E_WARNING) {
+                $warnings[] = $errstr;
+            }
+            // Возвращаем true, чтобы обозначить, что предупреждение обработано
+            return true;
+        });
+
+        $result = $fn();
+
+        restore_error_handler();
+
+        // Убеждаемся, что предупреждений не возникло
+        $this->assertSame([], $warnings, 'Не должно возникать предупреждений');
+
+        return $result;
+    }
+
+    /**
      * Проверка типичного набора параметров.
      */
     public function testTypicalValues(): void
     {
         // Типичный набор исходных данных пользователя
-        $result = braceletText(15, 1, [10, 8], 10, 5, 'ru');
+        $result = $this->executeWithoutWarnings(
+            fn() => braceletText(15, 1, [10, 8], 10, 5, 'ru')
+        );
 
         // Ожидаем точное текстовое описание с количеством бусин каждого размера
         $this->assertSame(
@@ -48,7 +78,9 @@ final class BraceletTextTest extends TestCase
      */
     public function testZeroMagnet(): void
     {
-        $result = braceletText(15, 1, [10], 0, 5, 'ru');
+        $result = $this->executeWithoutWarnings(
+            fn() => braceletText(15, 1, [10], 0, 5, 'ru')
+        );
         $this->assertStringContainsString('0 мм крепление', $result);
     }
 
@@ -57,7 +89,9 @@ final class BraceletTextTest extends TestCase
      */
     public function testZeroTolerance(): void
     {
-        $result = braceletText(15, 1, [10], 10, 0, 'ru');
+        $result = $this->executeWithoutWarnings(
+            fn() => braceletText(15, 1, [10], 10, 0, 'ru')
+        );
         $this->assertStringContainsString('0 мм допуск', $result);
     }
 
@@ -79,7 +113,9 @@ final class BraceletTextTest extends TestCase
      */
     public function testLargeValues(): void
     {
-        $result = braceletText(20, 100, [10, 8, 6], 10, 5, 'ru');
+        $result = $this->executeWithoutWarnings(
+            fn() => braceletText(20, 100, [10, 8, 6], 10, 5, 'ru')
+        );
 
         // После повторных корректировок длины итоговое количество бусин
         // каждого диаметра может измениться, поэтому проверяем обновлённый результат
