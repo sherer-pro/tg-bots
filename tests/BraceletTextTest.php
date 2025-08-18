@@ -62,13 +62,14 @@ final class BraceletTextTest extends TestCase
     }
 
     /**
-     * Граничное значение: параметры приводят к пустому набору бусин.
+     * Граничное значение: магнит не может быть больше или равен
+     * общей длине браслета.
      */
-    public function testEmptyBeads(): void
+    public function testMagnetTooLong(): void
     {
+        // Ожидаем исключение, так как магнит занимает всю длину браслета
         $this->expectException(InvalidArgumentException::class);
-        // Подбираем параметры так, чтобы длина браслета совпадала
-        // с размером магнита. В результате массив с бусинами пуст.
+        $this->expectExceptionMessage('Общая длина браслета должна превышать размер магнита');
         braceletText(15, 1, [10], 155, 5, 'ru');
     }
 
