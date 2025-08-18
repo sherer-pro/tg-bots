@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/logger.php'; // Функции логирования доступны сразу
-require_once 'calc.php'; // Подключаем функции расчёта браслета
+require_once __DIR__ . '/calc.php'; // Подключаем функции расчёта браслета
+require_once __DIR__ . '/scenario.php'; // Подключаем логику пошагового сценария
 // Функции проверки IP-адресов Telegram вынесены в отдельный файл,
 // чтобы их можно было переиспользовать и тестировать изолированно.
 require_once __DIR__ . '/telegram_ip.php'; // Подключаем функции проверки IP
@@ -49,7 +50,7 @@ if (!defined('WEBHOOK_LIB')):
 
 try {
     // Подключаем конфигурацию, где задаются переменные окружения
-    require 'config.php';
+    require __DIR__ . '/config.php';
 } catch (Throwable $e) {
     // Если конфигурацию загрузить не удалось,
     // фиксируем ошибку и пробрасываем исключение дальше,
@@ -81,6 +82,13 @@ $trustForwarded = filter_var(
 
 $remoteIp = resolveRemoteIp($headers, $_SERVER, $trustForwarded); // передаём уже нормализованные заголовки
 
+// Всегда убеждаемся, что запрос пришёл с IP Telegram
+if (!isTelegramIP($remoteIp)) {
+    logError('Недопустимый запрос: IP ' . $remoteIp);
+    http_response_code(403);
+    exit;
+}
+
 /**
  * Секретный токен, заданный в переменных окружения.
  * Отсутствие значения допустимо только в тестовой среде.
@@ -89,30 +97,18 @@ $remoteIp = resolveRemoteIp($headers, $_SERVER, $trustForwarded); // перед�
  */
 $secret = $_ENV['WEBHOOK_SECRET'] ?? getenv('WEBHOOK_SECRET') ?: '';
 
-if ($secret === '') {
-    // В тестовом окружении значение токена может отсутствовать.
-    // В этом случае проверку токена отключаем, чтобы было удобно отлаживать
-    // бота без передачи дополнительных заголовков.
-    // ⚠ В боевой среде отключение проверки позволит злоумышленникам
-    // отправлять поддельные запросы к нашему webhook и выполнять
-    // несанкционированные операции.
-    $tokenValid = true;
-} else {
-    // Сравниваем ожидаемый токен с тем, что пришёл в запросе от Telegram.
-    $tokenValid = isset($headers['x-telegram-bot-api-secret-token'])
-        && hash_equals($secret, $headers['x-telegram-bot-api-secret-token']);
-}
-
-// Проверяем, что запрос пришёл от Telegram (по токену или IP)
-if (!$tokenValid && !isTelegramIP($remoteIp)) {
-    // Записываем информацию о недопустимом запросе, в лог пишется только частично скрытый токен
-    /** @var string $token Токен из заголовка запроса */
-    $token = $headers['x-telegram-bot-api-secret-token'] ?? '';
-    /** @var string $maskedToken Токен с показанными первыми четырьмя символами */
-    $maskedToken = $token !== '' ? substr($token, 0, 4) . '***' : '';
-    logError('Недопустимый запрос: IP ' . $remoteIp . ', токен: ' . $maskedToken);
-    http_response_code(403);
-    exit;
+if ($secret !== '') {
+    // При наличии секрета сверяем его с заголовком Telegram
+    if (!isset($headers['x-telegram-bot-api-secret-token'])
+        || !hash_equals($secret, $headers['x-telegram-bot-api-secret-token'])) {
+        /** @var string $token Токен из заголовка запроса */
+        $token = $headers['x-telegram-bot-api-secret-token'] ?? '';
+        /** @var string $maskedToken Маскируем токен, показывая только первые четыре символа */
+        $maskedToken = $token !== '' ? substr($token, 0, 4) . '***' : '';
+        logError('Недопустимый токен: ' . $maskedToken . ', IP ' . $remoteIp);
+        http_response_code(403);
+        exit;
+    }
 }
 
 // Считываем тело запроса и пытаемся декодировать JSON
@@ -212,110 +208,15 @@ if (!isset($msg['text'])) {
 
 $input = trim($msg['text']);
 
-switch ($step) {
-    case 1:
-        // Шаг 1 — обхват запястья в сантиметрах
-        $val = str_replace(',', '.', $input);
-        if (!is_numeric($val) || ($v = (float)$val) <= 0 || $v >= 100) {
-            $text = $userLang === 'en'
-                ? 'Invalid value. Enter wrist circumference in centimeters.'
-                : 'Некорректный обхват. Введи число в сантиметрах.';
-            send($text, $chatId);
-            break;
-        }
-        $data['wrist_cm'] = $v;
-        saveState($pdo, $userId, 2, $data);
-        $text = $userLang === 'en'
-            ? 'Step 2 of 5. How many wraps will the bracelet have?'
-            : 'Шаг 2 из 5. Сколько будет витков?';
-        send($text, $chatId);
-        break;
-    case 2:
-        // Шаг 2 — количество витков
-        if (!ctype_digit($input) || ($v = (int)$input) <= 0 || $v > 10) {
-            $text = $userLang === 'en'
-                ? 'Invalid wraps count. Enter a positive integer not greater than 10.'
-                : 'Некорректное число витков. Введи положительное целое число не больше 10.';
-            send($text, $chatId);
-            break;
-        }
-        $data['wraps'] = $v;
-        saveState($pdo, $userId, 3, $data);
-        $text = $userLang === 'en'
-            ? 'Step 3 of 5. Enter bead pattern in millimeters separated by semicolons (e.g., 10;8).'
-            : 'Шаг 3 из 5. Введи узор: размеры бусин в мм через точку с запятой (например 10;8).';
-        send($text, $chatId);
-        break;
-    case 3:
-        // Шаг 3 — узор браслета
-        $patternStr = str_replace(' ', '', str_replace(',', '.', $input));
-        $parts = array_filter(array_map('trim', explode(';', $patternStr)), 'strlen');
-        if (empty($parts) || count($parts) > 20) {
-            $text = $userLang === 'en' ? 'Invalid pattern.' : 'Некорректный узор.';
-            send($text, $chatId);
-            break;
-        }
-        $valid = true;
-        foreach ($parts as $p) {
-            if (!is_numeric($p)) {
-                $valid = false;
-                break;
-            }
-            $pv = (float)$p;
-            if ($pv <= 0 || $pv >= 100) {
-                $valid = false;
-                break;
-            }
-        }
-        if (!$valid) {
-            $text = $userLang === 'en' ? 'Invalid pattern.' : 'Некорректный узор.';
-            send($text, $chatId);
-            break;
-        }
-        $data['pattern'] = implode(';', $parts);
-        saveState($pdo, $userId, 4, $data);
-        $text = $userLang === 'en'
-            ? 'Step 4 of 5. Enter magnet size in millimeters.'
-            : 'Шаг 4 из 5. Укажи размер магнита в миллиметрах.';
-        send($text, $chatId);
-        break;
-    case 4:
-        // Шаг 4 — размер магнита
-        $val = str_replace(',', '.', $input);
-        if (!is_numeric($val) || ($v = (float)$val) <= 0 || $v >= 100) {
-            $text = $userLang === 'en'
-                ? 'Invalid magnet size.'
-                : 'Некорректный размер магнита.';
-            send($text, $chatId);
-            break;
-        }
-        $data['magnet_mm'] = $v;
-        saveState($pdo, $userId, 5, $data);
-        $text = $userLang === 'en'
-            ? 'Step 5 of 5. Enter allowable length tolerance in millimeters.'
-            : 'Шаг 5 из 5. Введи допуск по длине в миллиметрах.';
-        send($text, $chatId);
-        break;
-    case 5:
-        // Шаг 5 — допуск по длине и финальный расчёт
-        $val = str_replace(',', '.', $input);
-        if (!is_numeric($val) || ($v = (float)$val) <= 0 || $v >= 100) {
-            $text = $userLang === 'en'
-                ? 'Invalid tolerance.'
-                : 'Некорректный допуск.';
-            send($text, $chatId);
-            break;
-        }
-        $data['tolerance_mm'] = $v;
-        $pattern = array_map('floatval', explode(';', $data['pattern']));
-        $text = braceletText(
-            (float)$data['wrist_cm'],
-            (int)$data['wraps'],
-            $pattern,
-            (float)$data['magnet_mm'],
-            (float)$data['tolerance_mm'],
-            $userLang
-        );
+// Обрабатываем текущий шаг сценария с помощью общей функции
+$result = processStep($step, $input, $data, $userLang);
+$next = $result['next'];          // Номер следующего шага
+$responseText = $result['text'];  // Текст ответа пользователю
+$data = $result['data'];          // Обновлённые данные
+
+if ($next === 0) {
+    if ($data !== [] && $step === 5) {
+        // Пользователь успешно прошёл все шаги — сохраняем результат
         try {
             $stmt = $pdo->prepare('INSERT INTO log (tg_user_id,wrist_cm,wraps,pattern,magnet_mm,tolerance_mm,result_text) VALUES (?,?,?,?,?,?,?)');
             $stmt->execute([
@@ -325,23 +226,23 @@ switch ($step) {
                 $data['pattern'],
                 $data['magnet_mm'],
                 $data['tolerance_mm'],
-                $text
+                $responseText,
             ]);
             $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
         } catch (PDOException $e) {
             logError('Ошибка при сохранении результата: ' . $e->getMessage());
         }
-        send($text, $chatId);
-        break;
-    default:
-        // Некорректный шаг — сбрасываем состояние и фиксируем проблему
+    } else {
+        // Некорректный шаг — очищаем состояние и сообщаем в лог
         $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
-        logError('Неизвестный шаг диалога: ' . $step); // Сохраняем номер нераспознанного этапа
-        $text = $userLang === 'en'
-            ? 'Send /start to begin.'
-            : 'Отправь /start, чтобы начать.';
-        send($text, $chatId);
+        logError('Неизвестный шаг диалога: ' . $step);
+    }
+} else {
+    // Сохраняем состояние и переходим к следующему шагу
+    saveState($pdo, $userId, $next, $data);
 }
+
+send($responseText, $chatId);
 
 endif;
 
@@ -418,6 +319,8 @@ function send(string $text, int|string $chat, array $extra = []): bool {
  * @return void
  */
 function saveState(PDO $pdo, int $userId, int $step, array $data): void {
-    $stmt = $pdo->prepare('UPDATE user_state SET step = ?, data = ?, updated_at = now() WHERE tg_user_id = ?');
+    // CURRENT_TIMESTAMP поддерживается как PostgreSQL, так и SQLite,
+    // поэтому подходит для тестов и боевого окружения.
+    $stmt = $pdo->prepare('UPDATE user_state SET step = ?, data = ?, updated_at = CURRENT_TIMESTAMP WHERE tg_user_id = ?');
     $stmt->execute([$step, json_encode($data, JSON_UNESCAPED_UNICODE), $userId]);
 }
