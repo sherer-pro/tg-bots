@@ -165,9 +165,10 @@ if (isset($msg['text']) && preg_match('/^\/start(?:\s|$)/', $msg['text'])) {
         send($text, $chatId);
         exit;
     }
+    // Первый шаг диалога — запрашиваем обхват запястья
     $text = $userLang === 'en'
-        ? 'Enter wrist circumference in centimeters.'
-        : 'Введи обхват запястья в сантиметрах.';
+        ? 'Step 1 of 5. Enter wrist circumference in centimeters.'
+        : 'Шаг 1 из 5. Введи обхват запястья в сантиметрах.';
     send($text, $chatId);
     exit;
 }
@@ -225,8 +226,8 @@ switch ($step) {
         $data['wrist_cm'] = $v;
         saveState($pdo, $userId, 2, $data);
         $text = $userLang === 'en'
-            ? 'How many wraps will the bracelet have?'
-            : 'Сколько будет витков?';
+            ? 'Step 2 of 5. How many wraps will the bracelet have?'
+            : 'Шаг 2 из 5. Сколько будет витков?';
         send($text, $chatId);
         break;
     case 2:
@@ -241,8 +242,8 @@ switch ($step) {
         $data['wraps'] = $v;
         saveState($pdo, $userId, 3, $data);
         $text = $userLang === 'en'
-            ? 'Enter bead pattern in millimeters separated by semicolons (e.g., 10;8).'
-            : 'Введи узор: размеры бусин в мм через точку с запятой (например 10;8).';
+            ? 'Step 3 of 5. Enter bead pattern in millimeters separated by semicolons (e.g., 10;8).'
+            : 'Шаг 3 из 5. Введи узор: размеры бусин в мм через точку с запятой (например 10;8).';
         send($text, $chatId);
         break;
     case 3:
@@ -274,8 +275,8 @@ switch ($step) {
         $data['pattern'] = implode(';', $parts);
         saveState($pdo, $userId, 4, $data);
         $text = $userLang === 'en'
-            ? 'Enter magnet size in millimeters.'
-            : 'Укажи размер магнита в миллиметрах.';
+            ? 'Step 4 of 5. Enter magnet size in millimeters.'
+            : 'Шаг 4 из 5. Укажи размер магнита в миллиметрах.';
         send($text, $chatId);
         break;
     case 4:
@@ -291,8 +292,8 @@ switch ($step) {
         $data['magnet_mm'] = $v;
         saveState($pdo, $userId, 5, $data);
         $text = $userLang === 'en'
-            ? 'Enter allowable length tolerance in millimeters.'
-            : 'Введи допуск по длине в миллиметрах.';
+            ? 'Step 5 of 5. Enter allowable length tolerance in millimeters.'
+            : 'Шаг 5 из 5. Введи допуск по длине в миллиметрах.';
         send($text, $chatId);
         break;
     case 5:
@@ -333,8 +334,9 @@ switch ($step) {
         send($text, $chatId);
         break;
     default:
-        // Некорректный шаг — сбрасываем состояние
+        // Некорректный шаг — сбрасываем состояние и фиксируем проблему
         $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
+        logError('Неизвестный шаг диалога: ' . $step); // Сохраняем номер нераспознанного этапа
         $text = $userLang === 'en'
             ? 'Send /start to begin.'
             : 'Отправь /start, чтобы начать.';
