@@ -5,7 +5,10 @@ use PHPUnit\Framework\TestCase;
 require_once __DIR__ . '/../bracelet/logger.php';
 
 /**
- * Тесты функции logError, отвечающей за запись сообщений в лог.
+ * Тесты функций логирования, отвечающих за запись сообщений в лог.
+ *
+ * Проверяется корректное удаление переводов строк
+ * как для ошибок, так и для информационных сообщений.
  */
 final class LoggerTest extends TestCase
 {
@@ -24,7 +27,7 @@ final class LoggerTest extends TestCase
         // Формируем сообщение, содержащее перевод строки.
         $rawMessage = "первая строка\nвторая строка";
 
-        // Пишем сообщение в лог.
+        // Пишем сообщение об ошибке в лог.
         logError($rawMessage);
 
         // Читаем последнюю строку из файла логов.
@@ -37,6 +40,31 @@ final class LoggerTest extends TestCase
         $this->assertStringNotContainsString("\r", $lastLine);
 
         // Удаляем файл логов после теста, чтобы не оставлять следов.
+        unlink(LOG_FILE);
+    }
+
+    /**
+     * Убеждаемся, что logInfo также корректно обрабатывает переводы строк.
+     */
+    public function testInfoMessageSanitization(): void
+    {
+        if (file_exists(LOG_FILE)) {
+            unlink(LOG_FILE);
+        }
+
+        $rawMessage = "строка A\nстрока B";
+
+        // Пишем информационное сообщение в лог
+        logInfo($rawMessage);
+
+        $lines = file(LOG_FILE);
+        $lastLine = rtrim(end($lines), "\r\n");
+
+        // Проверяем, что в логе нет символов перевода строки.
+        $this->assertStringContainsString('строка A строка B', $lastLine);
+        $this->assertStringNotContainsString("\n", $lastLine);
+        $this->assertStringNotContainsString("\r", $lastLine);
+
         unlink(LOG_FILE);
     }
 }

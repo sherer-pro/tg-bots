@@ -116,6 +116,9 @@ if (!isset($update['message'])) {
     exit;
 }
 $msg    = $update['message'];
+$decodedMsg = json_encode($msg, JSON_UNESCAPED_UNICODE);
+// Фиксируем в логе факт получения сообщения и IP отправителя
+logInfo('Получено сообщение: ' . $decodedMsg . '; IP ' . $remoteIp);
 $chatId = $msg['chat']['id'];
 $userId = $msg['from']['id'];
 $userLang = $msg['from']['language_code'] ?? 'ru';
@@ -133,7 +136,11 @@ try {
         ? 'Database connection error. Please try again later.'
         : 'Ошибка подключения к базе данных. Попробуй позже.';
     logError('Ошибка подключения к БД: ' . $e->getMessage());
-    send($text, $chatId);
+    // Отправляем пользователю информацию об ошибке и проверяем результат
+    if (!send($text, $chatId)) {
+        // Логируем предупреждение, если сообщение не ушло
+        logError('Предупреждение: не удалось отправить уведомление об ошибке подключения, чат ' . $chatId);
+    }
     exit;
 }
 
@@ -150,14 +157,22 @@ if (isset($msg['text']) && preg_match('/^\/start(?:\s|$)/', $msg['text'])) {
         $text = $userLang === 'en'
             ? 'Server error. Try again later.'
             : 'Ошибка сервера. Попробуй позже.';
-        send($text, $chatId);
+        // Пытаемся уведомить пользователя и фиксируем результат отправки
+        if (!send($text, $chatId)) {
+            logError('Предупреждение: не удалось отправить сообщение об ошибке инициализации, чат ' . $chatId);
+        }
         exit;
     }
     // Первый шаг диалога — запрашиваем обхват запястья
     $text = $userLang === 'en'
         ? 'Step 1 of 5. Enter wrist circumference in centimeters.'
         : 'Шаг 1 из 5. Введи обхват запястья в сантиметрах.';
-    send($text, $chatId);
+    // Логируем начало сценария для текущего пользователя
+    logInfo('Начало сценария: пользователь ' . $userId . ', язык ' . $userLang . ', чат ' . $chatId);
+    // Отправляем приглашение к первому шагу и проверяем, что сообщение доставлено
+    if (!send($text, $chatId)) {
+        logError('Предупреждение: не удалось отправить стартовое сообщение, чат ' . $chatId);
+    }
     exit;
 }
 
@@ -172,7 +187,10 @@ try {
     $text = $userLang === 'en'
         ? 'Server error. Try again later.'
         : 'Ошибка сервера. Попробуй позже.';
-    send($text, $chatId);
+    // Пытаемся сообщить пользователю о проблеме и фиксируем результат
+    if (!send($text, $chatId)) {
+        logError('Предупреждение: не удалось отправить сообщение об ошибке чтения состояния, чат ' . $chatId);
+    }
     exit;
 }
 
@@ -181,7 +199,10 @@ if ($state === false) {
     $text = $userLang === 'en'
         ? 'Send /start to begin.'
         : 'Отправь /start, чтобы начать.';
-    send($text, $chatId);
+    // Сообщаем пользователю, что диалог не начат, и проверяем отправку
+    if (!send($text, $chatId)) {
+        logError('Предупреждение: не удалось отправить подсказку о /start, чат ' . $chatId);
+    }
     exit;
 }
 
@@ -194,7 +215,10 @@ if (!isset($msg['text'])) {
     $text = $userLang === 'en'
         ? 'Please send a text value.'
         : 'Пожалуйста, введи значение текстом.';
-    send($text, $chatId);
+    // Отправляем рекомендацию отправить текст и проверяем доставку
+    if (!send($text, $chatId)) {
+        logError('Предупреждение: не удалось отправить сообщение о необходимости текстового ввода, чат ' . $chatId);
+    }
     exit;
 }
 
@@ -233,8 +257,10 @@ if ($next === 0) {
     // Сохраняем состояние и переходим к следующему шагу
     saveState($pdo, $userId, $next, $data);
 }
-
-send($responseText, $chatId);
+// Отправляем пользователю ответ и проверяем, успешно ли он доставлен
+if (!send($responseText, $chatId)) {
+    logError('Предупреждение: не удалось отправить ответ, чат ' . $chatId);
+}
 
 /**
  * Отправляет сообщение пользователю.
