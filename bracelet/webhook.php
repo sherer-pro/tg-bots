@@ -258,32 +258,15 @@ if (isset($msg['web_app_data']['data'])) {
 endif;
 
 /**
- * Отправляет сообщение пользователю Telegram через метод sendMessage.
+ * Отправляет сообщение пользователю.
  *
- * Использует HTTP POST-запрос к Bot API. После получения ответа и
- * проверки HTTP-кода функция декодирует JSON и анализирует флаг `ok`.
- * При сетевых сбоях, отрицательном HTTP-статусе, некорректном JSON или
- * `ok = false` функция фиксирует событие в логе и возвращает `false`,
- * исключения не выбрасывает.
+ * @param string      $text  Текст сообщения.
+ * @param int|string  $chat  ID чата или @username.
+ * @param array       $extra Дополнительные параметры.
  *
- * Возможные причины возврата `false`:
- * - ошибка cURL (например, таймаут соединения);
- * - HTTP-код вне диапазона 2xx;
- * - некорректный JSON в ответе Bot API;
- * - `ok` отсутствует или имеет значение `false` (сообщение берётся из
- *   поля `description`).
- *
- * @param string     $text  Текст отправляемого сообщения.
- * @param int|string $chat  Идентификатор чата или имя пользователя.
- * @param array      $extra Дополнительные поля запроса,
- *                          например `reply_markup`.
- *
- * @internal Используются таймауты `CURLOPT_CONNECTTIMEOUT` = 5 и
- *           `CURLOPT_TIMEOUT` = 10.
- *
- * @return bool `true` в случае успешной отправки, иначе `false`.
+ * @return bool true при успешной отправке.
  */
-function send($text, $chat, $extra = []) {
+function send(string $text, int|string $chat, array $extra = []): bool {
     $url  = API_URL . 'sendMessage';
     $data = array_merge(['chat_id' => $chat, 'text' => $text], $extra);
 
