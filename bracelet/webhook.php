@@ -130,22 +130,6 @@ if (!isset($update['message'])) {
 $msg    = $update['message'];
 $chatId = $msg['chat']['id'];
 
-try {
-    // Пытаемся установить соединение с базой данных
-    $pdo = new PDO(DB_DSN, DB_USER, DB_PASSWORD, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-    ]);
-} catch (PDOException $e) {
-    // При ошибке подключения уведомляем пользователя и логируем детали
-    $userLang = $msg['from']['language_code'] ?? 'ru';
-    $text     = $userLang === 'en'
-        ? 'Database connection error. Please try again later.'
-        : 'Ошибка подключения к базе данных. Попробуй позже.';
-    logError('Ошибка подключения к БД: ' . $e->getMessage());
-    send($text, $chatId);
-    exit;
-}
-
 // Обрабатываем команду /start, допускающую передачу дополнительного параметра
 if (isset($msg['text']) && strncmp($msg['text'], '/start', 6) === 0) {
     /**
@@ -170,6 +154,25 @@ if (isset($msg['text']) && strncmp($msg['text'], '/start', 6) === 0) {
         // Если отправка не удалась, уведомляем пользователя отдельным сообщением
         send('Не удалось отправить сообщение. Попробуй позже.', $chatId);
     }
+    exit;
+}
+
+// После обработки /start устанавливаем соединение с БД.
+// Это позволяет избежать лишнего подключения при простых командах.
+try {
+    // Пытаемся установить соединение с базой данных
+    /** @var PDO $pdo Подключение к базе данных */
+    $pdo = new PDO(DB_DSN, DB_USER, DB_PASSWORD, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    ]);
+} catch (PDOException $e) {
+    // При ошибке подключения уведомляем пользователя и логируем детали
+    $userLang = $msg['from']['language_code'] ?? 'ru';
+    $text     = $userLang === 'en'
+        ? 'Database connection error. Please try again later.'
+        : 'Ошибка подключения к базе данных. Попробуй позже.';
+    logError('Ошибка подключения к БД: ' . $e->getMessage());
+    send($text, $chatId);
     exit;
 }
 
