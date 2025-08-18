@@ -26,7 +26,7 @@ final class ZResolveRemoteIpTest extends TestCase
     {
         $headers = ['X-Forwarded-For' => '203.0.113.5, 198.51.100.23'];
         $server  = ['REMOTE_ADDR' => '198.51.100.23'];
-        $this->assertSame('203.0.113.5', resolveRemoteIp($headers, $server));
+        $this->assertSame('203.0.113.5', resolveRemoteIp($headers, $server, true));
     }
 
     /**
@@ -35,6 +35,17 @@ final class ZResolveRemoteIpTest extends TestCase
     public function testFallsBackToRemoteAddr(): void
     {
         $headers = [];
+        $server  = ['REMOTE_ADDR' => '198.51.100.23'];
+        $this->assertSame('198.51.100.23', resolveRemoteIp($headers, $server));
+    }
+
+    /**
+     * Если доверие к заголовку не выражено, используется REMOTE_ADDR даже при
+     * наличии X-Forwarded-For.
+     */
+    public function testIgnoresForwardedForWhenNotTrusted(): void
+    {
+        $headers = ['X-Forwarded-For' => '203.0.113.5'];
         $server  = ['REMOTE_ADDR' => '198.51.100.23'];
         $this->assertSame('198.51.100.23', resolveRemoteIp($headers, $server));
     }
