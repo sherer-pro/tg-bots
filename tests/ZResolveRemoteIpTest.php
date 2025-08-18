@@ -8,15 +8,13 @@ use PHPUnit\Framework\TestCase;
 final class ZResolveRemoteIpTest extends TestCase
 {
     /**
-     * Подключаем файл webhook.php, определяющий функцию resolveRemoteIp,
-     * но без выполнения основного кода скрипта.
+     * Подключаем модуль сетевых функций, содержащий resolveRemoteIp.
+     * Теперь нет необходимости подключать весь webhook.php и подавлять его
+     * выполнение через константу.
      */
     public static function setUpBeforeClass(): void
     {
-        if (!defined('WEBHOOK_LIB')) {
-            define('WEBHOOK_LIB', true);
-        }
-        require_once __DIR__ . '/../bracelet/webhook.php';
+        require_once __DIR__ . '/../bracelet/network.php';
     }
 
     /**
