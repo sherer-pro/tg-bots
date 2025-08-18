@@ -70,35 +70,59 @@ function braceletText(
     // Остаток бусин, не образующий полный паттерн
     $rest = $rough % count($pattern);
 
-    // Формируем итоговый массив бусин
-    // Сначала собираем массив повторов паттерна, затем добавляем остаток
-    // и разворачиваем получившийся массив при слиянии
-    $beadChunks = array_fill(0, $blocks, $pattern);
-    $beadChunks[] = array_slice($pattern, 0, $rest);
-    $beads = array_merge(...$beadChunks);
+    // Функция нормализации диаметра бусины: округляем до сотых
+    // и приводим к строке, чтобы использовать как ключ массива
+    $normalize = static fn(float $d): string => (string) round($d, 2);
+
+    // Ассоциативный массив счётчиков "нормализованный диаметр => количество"
+    $counts = [];
+
+    // Общая длина всех учтённых бусин без магнита
+    $beadsLen = 0.0;
+
+    // Число элементов в паттерне для удобства
+    $patternLen = count($pattern);
+
+    // Добавляем полные блоки паттерна
+    foreach ($pattern as $diameter) {
+        $key = $normalize($diameter);
+        $counts[$key] = ($counts[$key] ?? 0) + $blocks;
+        $beadsLen += $diameter * $blocks;
+    }
+
+    // Позиция в паттерне, с которой начнётся добавление новых бусин
+    $seqIndex = 0;
+
+    // Добавляем остаток паттерна
+    for ($i = 0; $i < $rest; $i++) {
+        $diameter = $pattern[$i];
+        $key = $normalize($diameter);
+        $counts[$key] = ($counts[$key] ?? 0) + 1;
+        $beadsLen += $diameter;
+        $seqIndex++;
+    }
 
     // Проверяем, что после расчётов получился непустой набор бусин.
-    // Если в массиве нет ни одного элемента, значит параметры подобраны
-    // некорректно и браслет построить невозможно.
-    if (count($beads) === 0) {
+    if (array_sum($counts) === 0) {
         throw new InvalidArgumentException(
             'Невозможно подобрать набор бусин с указанными параметрами'
         );
     }
 
     // Удаляем последнюю бусину, если её диаметр почти совпадает с размером магнита
-    for ($i = count($beads) - 1; $i >= 0; $i--) {
-        if (abs($beads[$i] - $magnetMm) < 0.5) {
-            array_splice($beads, $i, 1);
-            break;
+    $lastIndex = ($seqIndex - 1 + $patternLen) % $patternLen;
+    $lastBead = $pattern[$lastIndex];
+    if (abs($lastBead - $magnetMm) < 0.5) {
+        $key = $normalize($lastBead);
+        if (--$counts[$key] === 0) {
+            unset($counts[$key]);
         }
+        $beadsLen -= $lastBead;
+        $seqIndex = $lastIndex;
     }
 
-    // Локальная функция для подсчёта общей длины браслета
-    $len = fn($b) => array_sum($b) + $magnetMm;
-
     // Текущая длина собранного браслета
-    $currentLen = $len($beads);
+    $currentLen = $beadsLen + $magnetMm;
 
     // Разница между требуемой длиной и текущей
     $delta = $Lt - $currentLen;
@@ -114,34 +138,39 @@ function braceletText(
             // на средний диаметр бусины. Округляем вверх,
             // чтобы гарантированно удалить достаточно бусин.
             $remove = (int) ceil(($currentLen - ($Lt + 2)) / $avg);
-            if ($remove > 0) {
-                $beads = array_slice($beads, 0, count($beads) - $remove);
+            for ($j = 0; $j < $remove; $j++) {
+                $seqIndex = ($seqIndex - 1 + $patternLen) % $patternLen;
+                $diameter = $pattern[$seqIndex];
+                $key = $normalize($diameter);
+                if (--$counts[$key] === 0) {
+                    unset($counts[$key]);
+                }
+                $beadsLen -= $diameter;
             }
         } elseif ($delta > 2) {
             // Браслет короче допустимого. Недостающую длину
             // делим на средний диаметр бусины и округляем вверх,
             // получая количество элементов для добавления.
             $add = (int) ceil(($Lt - 2 - $currentLen) / $avg);
-            if ($add > 0) {
-                $addChunks = array_fill(0, intdiv($add, count($pattern)), $pattern);
-                $addChunks[] = array_slice($pattern, 0, $add % count($pattern));
-                $beads = array_merge($beads, ...$addChunks);
+            for ($j = 0; $j < $add; $j++) {
+                $diameter = $pattern[$seqIndex];
+                $key = $normalize($diameter);
+                $counts[$key] = ($counts[$key] ?? 0) + 1;
+                $beadsLen += $diameter;
+                $seqIndex = ($seqIndex + 1) % $patternLen;
             }
         }
 
         // Повторный расчёт текущей длины и отклонения после корректировки
-        $currentLen = $len($beads);
+        $currentLen = $beadsLen + $magnetMm;
         $delta = $Lt - $currentLen;
     }
 
-    // Подсчитываем количество бусин каждого диаметра
-    $sizes = array_count_values($beads);
-
     // Сортируем размеры в порядке убывания для наглядности
-    krsort($sizes);
+    uksort($counts, static fn(string $a, string $b): int => (float) $b <=> (float) $a);
 
     $parts = [];
-    foreach ($sizes as $d => $n) {
+    foreach ($counts as $d => $n) {
         $word = $lang === 'en' ? 'beads' : 'бусин';
         // Формируем фрагмент описания количества и диаметра
         // Используем фигурные скобки вокруг переменных, чтобы избежать
