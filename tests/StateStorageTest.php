@@ -44,4 +44,37 @@ final class StateStorageTest extends TestCase
         $logContents = file_get_contents($logFile);
         $this->assertStringContainsString('Ошибка JSON при сохранении состояния пользователя', $logContents);
     }
+
+    /**
+     * Проверяем, что при чтении состояния с повреждённым JSON
+     * метод getState выбрасывает исключение и пишет сообщение в лог.
+     */
+    public function testGetStateLogsAndThrowsOnInvalidJson(): void
+    {
+        // Создаём временную базу данных SQLite и таблицу состояния
+        $dbFile = tempnam(sys_get_temp_dir(), 'db');
+        $pdo = new \PDO('sqlite:' . $dbFile);
+        $pdo->exec('CREATE TABLE user_state (tg_user_id INTEGER PRIMARY KEY, step INTEGER NOT NULL, data TEXT NOT NULL, updated_at TEXT);');
+
+        // Вставляем запись с некорректным JSON в поле data
+        $pdo->exec("INSERT INTO user_state (tg_user_id, step, data) VALUES (1, 3, '{invalid')");
+
+        // Инициализируем объект хранилища состояния
+        $storage = new StateStorage($pdo);
+
+        // Путь к лог-файлу
+        $logFile = __DIR__ . '/../bracelet/logs/app.log';
+        if (file_exists($logFile)) {
+            unlink($logFile);
+        }
+
+        // Ожидаем, что метод getState выбросит исключение
+        $this->expectException(\RuntimeException::class);
+        $storage->getState(1);
+
+        // Проверяем, что в лог записано сообщение об ошибке
+        $this->assertFileExists($logFile);
+        $logContents = file_get_contents($logFile);
+        $this->assertStringContainsString('Ошибка JSON при чтении состояния пользователя', $logContents);
+    }
 }
