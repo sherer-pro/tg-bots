@@ -128,10 +128,11 @@ namespace {
             $_SERVER['REMOTE_ADDR'] = '149.154.160.1';
 
             // Формируем минимальное обновление Telegram.
+            // Идентификаторы задаём строками, чтобы проверить приведение к int.
             $update = [
                 'message' => [
-                    'chat' => ['id' => 1],
-                    'from' => ['id' => 42, 'language_code' => 'ru'],
+                    'chat' => ['id' => '1'],
+                    'from' => ['id' => '42', 'language_code' => 'ru'],
                     'text' => 'привет',
                 ],
             ];
