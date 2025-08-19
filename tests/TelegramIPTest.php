@@ -58,4 +58,23 @@ final class TelegramIPTest extends TestCase
         // Префикс 129 для IPv6 превышает допустимые 128 бит
         $this->assertFalse(ipInRange('2001:67c:4e8::1', '2001:67c:4e8::/129'));
     }
+
+    /**
+     * Диапазоны, перечисленные в конфигурационном файле,
+     * должны считываться и распознаваться функцией isTelegramIP.
+     *
+     * @return void
+     */
+    public function testConfigFileIsLoaded(): void
+    {
+        $ranges = require __DIR__ . '/../bracelet/config/telegram_ips.php';
+
+        foreach ($ranges as $cidr) {
+            [$network] = explode('/', $cidr, 2);
+            $this->assertTrue(
+                isTelegramIP($network),
+                "Диапазон {$cidr} должен распознаваться"
+            );
+        }
+    }
 }
