@@ -42,16 +42,19 @@
    psql -U "$DB_USER" -d "$DB_NAME" -f bracelet/sql/schema.sql
    ```
 
-5. Запустите обработчик веб-хука:
+5. Запустите встроенный сервер PHP из корня проекта.
+   Это позволит обрабатывать запросы как к основному боту,
+   так и к тестовому по пути `/test`:
 
    ```bash
-   php -S 0.0.0.0:8000 -t bracelet
+   php -S 0.0.0.0:8000 -t .
    ```
 
-6. Зарегистрируйте URL веб-хука у Telegram, передав секретный токен:
+6. Зарегистрируйте URL веб-хука у Telegram, передав секретный токен.
+   Для тестового бота укажите путь `/test/webhook.php`:
 
    ```bash
-   curl -F "url=https://example.com/webhook.php" \
+   curl -F "url=https://example.com/test/webhook.php" \
         -F "secret_token=$WEBHOOK_SECRET" \
         "https://api.telegram.org/bot$BOT_TOKEN/setWebhook"
    ```
