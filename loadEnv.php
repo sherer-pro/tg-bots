@@ -2,8 +2,29 @@
 
 declare(strict_types=1);
 
-// Подключаем автозагрузчик Composer, чтобы можно было использовать библиотеку vlucas/phpdotenv.
-require_once __DIR__ . '/vendor/autoload.php';
+// Подключаем собственный логгер, чтобы иметь возможность писать понятные
+// сообщения в файл логов без зависимости от автозагрузчика Composer.
+require_once __DIR__ . '/bracelet/logger.php';
+
+// Импортируем функции логирования из пространства имён Bracelet,
+// чтобы обращаться к ним без указания полного имени.
+use function Bracelet\logError;
+use function Bracelet\logInfo;
+
+// Формируем путь к автозагрузчику Composer.
+$autoload = __DIR__ . '/vendor/autoload.php';
+
+// Перед подключением проверяем существование файла автозагрузчика.
+if (!file_exists($autoload)) {
+    // Сообщаем о проблеме в лог и подсказываем действие пользователю.
+    logError('Файл autoload.php отсутствует. Выполните "composer install".');
+
+    // Прерываем выполнение, так как без автозагрузчика библиотека dotenv недоступна.
+    throw new RuntimeException('Не найден автозагрузчик Composer.');
+}
+
+// Подключаем автозагрузчик, чтобы использовать библиотеку vlucas/phpdotenv.
+require_once $autoload;
 
 use Dotenv\Dotenv;
 
@@ -16,13 +37,14 @@ use Dotenv\Dotenv;
  *
  * @param string $botName Имя бота, которое соответствует суффиксу в названии файла.
  *
- * @throws RuntimeException Если файл с переменными окружения не найден.
+ * @throws RuntimeException Если автозагрузчик Composer или файл с переменными
+ *                          окружения не найден.
  *
  * @return void
  */
 function loadBotEnv(string $botName): void
 {
-    // Формируем имя файла вида `.env.<botName>`.
+    // Формируем имя файла с настройками вида `.env.<botName>`.
     $envFile = ".env.$botName";
     $basePath = __DIR__;
 
@@ -32,11 +54,11 @@ function loadBotEnv(string $botName): void
     }
 
     /**
-     * Информируем в системный лог о начале загрузки переменных
-     * окружения из найденного файла. Это помогает отслеживать, из
-     * какого именно источника берутся настройки бота во время запуска.
+     * Информируем через наш логгер о начале чтения переменных
+     * окружения из найденного файла. Это позволяет отслеживать,
+     * какие настройки были использованы при запуске бота.
      */
-    error_log("Загружаем переменные из {$envFile}");
+    logInfo("Загружаем переменные из {$envFile}");
 
     // Загружаем переменные окружения из указанного файла.
     $dotenv = Dotenv::createImmutable($basePath, $envFile);
@@ -48,8 +70,10 @@ function loadBotEnv(string $botName): void
      * сообщение в лог, чтобы упростить диагностику проблем.
      */
     if (getenv('BOT_TOKEN') === false) {
-        error_log('Переменная BOT_TOKEN не найдена после загрузки.');
+        // Фиксируем отсутствие обязательного токена в лог как ошибку.
+        logError('Переменная BOT_TOKEN не найдена после загрузки.');
     } else {
-        error_log('Переменная BOT_TOKEN успешно загружена.');
+        // Сообщаем, что токен успешно считан.
+        logInfo('Переменная BOT_TOKEN успешно загружена.');
     }
 }
