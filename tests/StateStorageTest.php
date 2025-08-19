@@ -77,4 +77,65 @@ final class StateStorageTest extends TestCase
         $logContents = file_get_contents($logFile);
         $this->assertStringContainsString('Ошибка JSON при чтении состояния пользователя', $logContents);
     }
+
+    /**
+     * Проверяем, что метод saveResult реагирует на отсутствие
+     * обязательных ключей в данных: фиксирует ошибку в лог и
+     * выбрасывает исключение RuntimeException.
+     *
+     * @dataProvider provideMissingKeys
+     */
+    public function testSaveResultLogsAndThrowsOnMissingKey(string $missingKey): void
+    {
+        // Создаём временную базу SQLite и необходимые таблицы.
+        $dbFile = tempnam(sys_get_temp_dir(), 'db');
+        $pdo = new \PDO('sqlite:' . $dbFile);
+        $pdo->exec('CREATE TABLE user_state (tg_user_id INTEGER PRIMARY KEY, step INTEGER NOT NULL, data TEXT NOT NULL, updated_at TEXT);');
+        $pdo->exec('CREATE TABLE log (id INTEGER PRIMARY KEY AUTOINCREMENT, tg_user_id INTEGER, wrist_cm REAL, wraps INTEGER, pattern TEXT, magnet_mm REAL, tolerance_mm REAL, result_text TEXT, created_at TEXT);');
+
+        $storage = new StateStorage($pdo);
+
+        // Полный набор корректных данных для сохранения результата.
+        $data = [
+            'wrist_cm' => 16.5,
+            'wraps' => 3,
+            'pattern' => 'demo',
+            'magnet_mm' => 5.0,
+            'tolerance_mm' => 0.5,
+        ];
+        // Искусственно удаляем один из обязательных ключей.
+        unset($data[$missingKey]);
+
+        // Очищаем лог-файл перед выполнением теста.
+        $logFile = __DIR__ . '/../bracelet/logs/app.log';
+        if (file_exists($logFile)) {
+            unlink($logFile);
+        }
+
+        // Ожидаем исключение и одновременно проверяем, что ошибка
+        // записана в лог-файл даже при его возникновении.
+        $this->expectException(\RuntimeException::class);
+        try {
+            $storage->saveResult(1, $data, 'res');
+        } finally {
+            $this->assertFileExists($logFile);
+            $logContents = file_get_contents($logFile);
+            $this->assertStringContainsString('Отсутствует обязательный ключ', $logContents);
+            $this->assertStringContainsString($missingKey, $logContents);
+        }
+    }
+
+    /**
+     * Набор обязательных ключей для проверки в тесте saveResult.
+     *
+     * @return iterable<array{0:string}>
+     */
+    public static function provideMissingKeys(): iterable
+    {
+        yield ['wrist_cm'];
+        yield ['wraps'];
+        yield ['pattern'];
+        yield ['magnet_mm'];
+        yield ['tolerance_mm'];
+    }
 }
