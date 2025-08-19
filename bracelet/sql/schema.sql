@@ -1,69 +1,23 @@
--- Схема базы данных для различных СУБД.
--- Используйте блок, соответствующий вашему диалекту.
+-- Схема базы данных для PostgreSQL.
+-- Альтернативные диалекты находятся в файлах schema.sqlite.sql и schema.mysql.sql.
 
--- PostgreSQL ---------------------------------------------------------------
--- В этом варианте используется тип JSONB для хранения произвольных данных.
---
--- CREATE TABLE log (
---     id           SERIAL PRIMARY KEY,
---     tg_user_id   BIGINT,
---     wrist_cm     NUMERIC(5,1),
---     wraps        INT,
---     pattern      TEXT,
---     magnet_mm    NUMERIC(5,1),
---     tolerance_mm NUMERIC(5,1),
---     result_text  TEXT,
---     created_at   TIMESTAMPTZ DEFAULT now()
--- );
---
--- CREATE TABLE user_state (
---     tg_user_id BIGINT PRIMARY KEY,
---     step       SMALLINT NOT NULL,
---     data       JSONB NOT NULL DEFAULT '{}'::jsonb,
---     updated_at TIMESTAMPTZ DEFAULT now()
--- );
+-- Таблица логов расчётов браслета
+CREATE TABLE log (
+    id           SERIAL PRIMARY KEY,          -- уникальный идентификатор записи
+    tg_user_id   BIGINT,                      -- идентификатор пользователя в Telegram
+    wrist_cm     NUMERIC(5,1),                -- окружность запястья в сантиметрах
+    wraps        INT,                         -- количество оборотов верёвки
+    pattern      TEXT,                        -- выбранный узор плетения
+    magnet_mm    NUMERIC(5,1),                -- размер магнита в миллиметрах
+    tolerance_mm NUMERIC(5,1),                -- допуск на погрешность в миллиметрах
+    result_text  TEXT,                        -- текст с результатом расчёта
+    created_at   TIMESTAMPTZ DEFAULT now()    -- время создания записи
+);
 
--- SQLite -----------------------------------------------------------------
--- Здесь поле data хранится в текстовом виде.
---
--- CREATE TABLE log (
---     id           INTEGER PRIMARY KEY AUTOINCREMENT,
---     tg_user_id   INTEGER,
---     wrist_cm     REAL,
---     wraps        INTEGER,
---     pattern      TEXT,
---     magnet_mm    REAL,
---     tolerance_mm REAL,
---     result_text  TEXT,
---     created_at   TEXT DEFAULT CURRENT_TIMESTAMP
--- );
---
--- CREATE TABLE user_state (
---     tg_user_id INTEGER PRIMARY KEY,
---     step       INTEGER NOT NULL,
---     data       TEXT NOT NULL DEFAULT '{}',
---     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
--- );
-
--- MySQL -------------------------------------------------------------------
--- Для MySQL используется тип JSON и автоматическое обновление времени.
---
--- CREATE TABLE log (
---     id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
---     tg_user_id   BIGINT,
---     wrist_cm     DECIMAL(5,1),
---     wraps        INT,
---     pattern      TEXT,
---     magnet_mm    DECIMAL(5,1),
---     tolerance_mm DECIMAL(5,1),
---     result_text  TEXT,
---     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
--- ) ENGINE=InnoDB;
---
--- CREATE TABLE user_state (
---     tg_user_id BIGINT PRIMARY KEY,
---     step       SMALLINT NOT NULL,
---     data       JSON NOT NULL,
---     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
--- ) ENGINE=InnoDB;
-
+-- Текущее состояние пользователя при взаимодействии с ботом
+CREATE TABLE user_state (
+    tg_user_id BIGINT PRIMARY KEY,            -- идентификатор пользователя в Telegram
+    step       SMALLINT NOT NULL,             -- текущий шаг сценария
+    data       JSONB NOT NULL DEFAULT '{}'::jsonb, -- вспомогательные данные в формате JSON
+    updated_at TIMESTAMPTZ DEFAULT now()      -- время последнего обновления
+);
