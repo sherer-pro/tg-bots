@@ -23,13 +23,19 @@ final class WebhookTest extends TestCase
         return $dir;
     }
     /**
-     * Убедимся, что в webhook используется функция processStep вместо switch.
+     * Проверяем, что webhook реализован классом и использует функцию
+     * processStep вместо switch, а index.php создаёт этот класс.
      */
-    public function testWebhookContainsProcessStepCall(): void
+    public function testWebhookUsesProcessorClass(): void
     {
-        $code = file_get_contents(__DIR__ . '/../bracelet/webhook.php');
-        $this->assertStringContainsString('processStep', $code);
-        $this->assertStringNotContainsString('switch ($step)', $code);
+        $webhookCode = file_get_contents(__DIR__ . '/../bracelet/webhook.php');
+        $this->assertStringContainsString('class WebhookProcessor', $webhookCode);
+        $this->assertStringContainsString('processStep', $webhookCode);
+        $this->assertStringNotContainsString('switch ($step)', $webhookCode);
+        $this->assertStringNotContainsString('function runWebhook', $webhookCode);
+
+        $indexCode = file_get_contents(__DIR__ . '/../index.php');
+        $this->assertStringContainsString('new WebhookProcessor()', $indexCode);
     }
 
     /**
