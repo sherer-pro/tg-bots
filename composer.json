@@ -5,5 +5,17 @@
     },
     "require-dev": {
         "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Bracelet\\": "bracelet/"
+        },
+        "files": [
+            "bracelet/logger.php",
+            "bracelet/network.php",
+            "bracelet/telegram_ip.php",
+            "bracelet/scenario.php",
+            "bracelet/calc.php"
+        ]
     }
 }

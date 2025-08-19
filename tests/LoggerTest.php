@@ -1,8 +1,9 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
-
-require_once __DIR__ . '/../bracelet/logger.php';
+use function Bracelet\logError;
+use function Bracelet\logInfo;
+use const Bracelet\LOG_FILE;
 
 /**
  * Тесты функций логирования, отвечающих за запись сообщений в лог.

@@ -1,8 +1,7 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
-
-require_once __DIR__ . '/../bracelet/scenario.php';
+use function Bracelet\processStep;
 
 /**
  * Тесты функции processStep, реализующей пошаговый сценарий.

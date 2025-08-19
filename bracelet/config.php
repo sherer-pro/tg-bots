@@ -1,5 +1,10 @@
 <?php
-require_once __DIR__ . '/logger.php'; // Подключаем функции логирования
+
+namespace Bracelet;
+
+use RuntimeException;
+use function loadBotEnv;
+
 require_once __DIR__ . '/../loadEnv.php'; // Подключаем функцию загрузки .env-файлов
 loadBotEnv('bracelet'); // Загружаем переменные из `.env.bracelet`
 

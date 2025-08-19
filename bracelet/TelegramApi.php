@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/logger.php';
+namespace Bracelet;
 
 /**
  * Класс-обёртка для работы с API Telegram.

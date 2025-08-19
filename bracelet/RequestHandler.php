@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/logger.php';
-require_once __DIR__ . '/network.php';
-require_once __DIR__ . '/telegram_ip.php';
+namespace Bracelet;
 
 /**
  * Класс, отвечающий за чтение и валидацию входящего запроса от Telegram.

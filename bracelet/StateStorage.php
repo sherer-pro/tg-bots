@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+namespace Bracelet;
+
+use PDO;
+
 /**
  * Класс для работы с таблицами `user_state` и `log` базы данных.
  *
