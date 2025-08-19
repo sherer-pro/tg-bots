@@ -79,10 +79,11 @@ final class BraceletTextTest extends TestCase
      */
     public function testZeroMagnet(): void
     {
-        $result = $this->executeWithoutWarnings(
-            fn() => braceletText(15, 1, [10], 0, 5, 'ru')
-        );
-        $this->assertStringContainsString('0 мм крепление', $result);
+        // При отсутствии магнита и ненулевом допуске набор
+        // бусин не удаётся собрать с нужной длиной
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Нужная длина браслета не достигнута');
+        braceletText(15, 1, [10], 0, 5, 'ru');
     }
 
     /**
@@ -115,14 +116,28 @@ final class BraceletTextTest extends TestCase
     public function testLargeValues(): void
     {
         $result = $this->executeWithoutWarnings(
-            fn() => braceletText(20, 100, [10, 8, 6], 10, 5, 'ru')
+            fn() => braceletText(20, 100, [10, 8, 6], 10, 11, 'ru')
         );
 
         // После повторных корректировок длины итоговое количество бусин
         // каждого диаметра может измениться, поэтому проверяем обновлённый результат
         $this->assertSame(
-            'Обхват 20 см → 833 бусин Ø10 мм и 833 бусин Ø8 мм и 833 бусин Ø6 мм + 5 мм допуск + 10 мм крепление',
+            'Обхват 20 см → 834 бусин Ø10 мм и 833 бусин Ø8 мм и 833 бусин Ø6 мм + 11 мм допуск + 10 мм крепление',
             $result
         );
+    }
+
+    /**
+     * Сценарий, когда предел корректировок достигнут,
+     * но нужная длина браслета так и не подобрана.
+     */
+    public function testIterationLimitReached(): void
+    {
+        // Ожидаем исключение из-за невозможности скорректировать длину
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Нужная длина браслета не достигнута');
+
+        // Параметры, при которых длина будет колебаться и не войдёт в допуск
+        braceletText(10, 1, [7], 3, 5, 'ru');
     }
 }
