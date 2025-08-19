@@ -10,9 +10,7 @@ namespace {
 }
 
 namespace Bracelet {
-    use PDO;
     use PDOException;
-    use Throwable;
 
     /**
      * Класс, инкапсулирующий работу webhook-скрипта.
@@ -24,6 +22,9 @@ namespace Bracelet {
      */
     final class WebhookProcessor
     {
+        /** @var Config Объект конфигурации приложения */
+        private Config $config;
+
         /** @var RequestHandler Объект для чтения и валидации запроса */
         private RequestHandler $requestHandler;
 
@@ -53,6 +54,14 @@ namespace Bracelet {
 
         /** @var string Последний ответ пользователю */
         private string $responseText = '';
+
+        /**
+         * @param Config $config Конфигурация приложения.
+         */
+        public function __construct(Config $config)
+        {
+            $this->config = $config;
+        }
 
         /**
          * Точка входа обработки webhook-запроса.
@@ -88,23 +97,12 @@ namespace Bracelet {
         }
 
         /**
-         * Загружает конфигурацию и подготавливает необходимые объекты.
+         * Подготавливает необходимые объекты и проверяет входной запрос.
          *
          * @return bool true в случае успеха, false при ошибке подключения к БД.
-         * @throws Throwable Любые проблемы с конфигурацией пробрасываются выше.
          */
         private function loadConfig(): bool
         {
-            try {
-                // Подключаем конфигурацию, где задаются переменные окружения.
-                require __DIR__ . '/config.php';
-            } catch (Throwable $e) {
-                // Фиксируем ошибку конфигурации и пробрасываем исключение,
-                // чтобы тесты могли её перехватить.
-                logError('Ошибка конфигурации: ' . $e->getMessage());
-                throw $e;
-            }
-
             // Определяем, доверять ли заголовку X-Forwarded-For.
             $trustForwarded = filter_var(
                 $_ENV['TRUST_FORWARDED'] ?? getenv('TRUST_FORWARDED'),
@@ -113,7 +111,7 @@ namespace Bracelet {
 
             // Создаём необходимые объекты для обработки запроса.
             $this->requestHandler = new RequestHandler($trustForwarded);
-            $this->telegram       = new TelegramApi();
+            $this->telegram       = new TelegramApi($this->config);
 
             // Читаем и валидируем входящий запрос.
             $req            = $this->requestHandler->handle();
@@ -125,10 +123,7 @@ namespace Bracelet {
 
             // Устанавливаем соединение с базой данных.
             try {
-                /** @var PDO $pdo Подключение к базе данных */
-                $pdo = new PDO(DB_DSN, DB_USER, DB_PASSWORD, [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                ]);
+                $this->storage = new StateStorage($this->config);
             } catch (PDOException $e) {
                 $text = $this->userLang === 'en'
                     ? 'Database connection error. Please try again later.'
@@ -139,8 +134,6 @@ namespace Bracelet {
                 }
                 return false;
             }
-
-            $this->storage = new StateStorage($pdo);
 
             return true;
         }
@@ -281,7 +274,9 @@ namespace Bracelet {
     // Если файл запущен напрямую (например, через CLI), запускаем обработку.
     if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
         try {
-            (new WebhookProcessor())->handle();
+            // Загружаем конфигурацию и передаём её в обработчик.
+            $config = require __DIR__ . '/config.php';
+            (new WebhookProcessor($config))->handle();
         } catch (InvalidIpException|InvalidTokenException $e) {
             // Запрос отклонён из-за IP или токена.
             http_response_code(403);

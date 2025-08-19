@@ -13,10 +13,12 @@ if (!file_exists($autoload)) {
 }
 require_once $autoload;
 
-// Подключаем класс обработчика webhook-запроса.
+// Подключаем класс обработчика webhook-запроса и конфигурацию бота.
 require __DIR__ . '/bracelet/webhook.php';
+$config = require __DIR__ . '/bracelet/config.php';
 
 /**
  * Создаём обработчик и запускаем обработку входящего HTTP-запроса Telegram.
  */
-(new WebhookProcessor())->handle();
+$processor = new WebhookProcessor($config); // new WebhookProcessor()
+$processor->handle();
