@@ -117,10 +117,11 @@ namespace Bracelet {
 
             // Читаем и валидируем входящий запрос.
             $req            = $this->requestHandler->handle();
-            $this->msg      = $req['message'];
-            $this->chatId   = $req['chatId'];
-            $this->userId   = $req['userId'];
-            $this->userLang = $req['userLang'];
+            // Объект Request предоставляет готовые свойства вместо индексов массива.
+            $this->msg      = $req->message;
+            $this->chatId   = $req->chatId;
+            $this->userId   = $req->userId;
+            $this->userLang = $req->userLang;
 
             // Устанавливаем соединение с базой данных.
             try {
