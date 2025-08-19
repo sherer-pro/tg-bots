@@ -25,14 +25,25 @@ class StateStorage
     private string $dialect;
 
     /**
-     * @param PDO $pdo Готовое подключение к базе данных.
+     * @param Config|PDO $source Объект конфигурации или готовое подключение.
      */
-    public function __construct(PDO $pdo)
+    public function __construct(Config|PDO $source)
     {
-        $this->pdo = $pdo;
+        if ($source instanceof Config) {
+            // Создаём подключение к базе данных согласно конфигурации.
+            $this->pdo = new PDO(
+                $source->dbDsn,
+                $source->dbUser,
+                $source->dbPassword,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+            );
+        } else {
+            // Принимаем готовое подключение (используется в тестах).
+            $this->pdo = $source;
+        }
 
         // Определяем тип драйвера, с которым работает PDO.
-        $this->dialect = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $this->dialect = (string)$this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
     }
 
     /**

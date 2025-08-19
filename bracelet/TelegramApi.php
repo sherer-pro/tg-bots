@@ -12,6 +12,18 @@ namespace Bracelet;
  */
 class TelegramApi
 {
+    /** @var string Базовый URL Telegram API */
+    private string $apiUrl;
+
+    /**
+     * @param Config $config Объект конфигурации с параметрами приложения.
+     */
+    public function __construct(Config $config)
+    {
+        // Сохраняем базовый URL API для дальнейшего использования.
+        $this->apiUrl = $config->apiUrl;
+    }
+
     /**
      * Отправляет сообщение пользователю.
      *
@@ -23,7 +35,8 @@ class TelegramApi
      */
     public function send(string $text, int|string $chat, array $extra = []): bool
     {
-        $url  = API_URL . 'sendMessage';
+        // Формируем конечный URL запроса к Telegram API.
+        $url  = $this->apiUrl . 'sendMessage';
         $data = array_merge(['chat_id' => $chat, 'text' => $text], $extra);
 
         // Инициализируем cURL для отправки POST-запроса.
