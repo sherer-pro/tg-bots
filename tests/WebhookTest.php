@@ -8,6 +8,21 @@ use PHPUnit\Framework\TestCase;
 final class WebhookTest extends TestCase
 {
     /**
+     * Создаёт временный каталог с `.env`-файлом и возвращает его путь.
+     *
+     * Файл содержит пустой `WEBHOOK_SECRET`, что позволяет запускать
+     * веб-хук без проверки секретного заголовка.
+     *
+     * @return string Путь к каталогу с временным `.env`.
+     */
+    private function createTempEnvDir(): string
+    {
+        $dir = sys_get_temp_dir() . '/env' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/.env.bracelet', "WEBHOOK_SECRET=\n");
+        return $dir;
+    }
+    /**
      * Убедимся, что в webhook используется функция processStep вместо switch.
      */
     public function testWebhookContainsProcessStepCall(): void
@@ -47,15 +62,16 @@ final class WebhookTest extends TestCase
             2 => ['pipe', 'w'],
         ];
 
+        $envDir = $this->createTempEnvDir();
         $env = [
-            'BOT_TOKEN' => 'dummy',
-            'DB_NAME' => 'test',
-            'DB_USER' => 'user',
-            'DB_PASSWORD' => 'pass',
-            'DB_DSN' => 'sqlite:' . $dbFile,
-            'API_URL' => 'file://' . $apiDir . '/',
-            'WEBHOOK_SECRET' => '',
-            'REMOTE_ADDR' => '8.8.8.8',
+            'BOT_TOKEN'      => 'dummy',
+            'DB_NAME'        => 'test',
+            'DB_USER'        => 'user',
+            'DB_PASSWORD'    => 'pass',
+            'DB_DSN'         => 'sqlite:' . $dbFile,
+            'API_URL'        => 'file://' . $apiDir . '/',
+            'REMOTE_ADDR'    => '8.8.8.8',
+            'DOTENV_PATH'    => $envDir,
         ];
 
         $proc = proc_open(PHP_BINARY . ' bracelet/webhook.php', $descriptorSpec, $pipes, __DIR__ . '/..', $env);
@@ -65,6 +81,10 @@ final class WebhookTest extends TestCase
         stream_get_contents($pipes[1]);
         stream_get_contents($pipes[2]);
         proc_close($proc);
+
+        // Удаляем временный .env-файл.
+        unlink($envDir . '/.env.bracelet');
+        rmdir($envDir);
 
         $pdoCheck = new PDO('sqlite:' . $dbFile);
         $row = $pdoCheck->query('SELECT step, data FROM user_state WHERE tg_user_id = 42')->fetch(PDO::FETCH_ASSOC);
@@ -78,13 +98,6 @@ final class WebhookTest extends TestCase
      */
     public function testRejectsOversizedBody(): void
     {
-        // Временная замена .env-файла с пустым секретом,
-        // чтобы веб-хук не требовал заголовок с токеном.
-        $envPath = __DIR__ . '/../.env.bracelet';
-        $originalEnv = file_get_contents($envPath);
-        $modifiedEnv = preg_replace('/^WEBHOOK_SECRET=.*/m', 'WEBHOOK_SECRET=', $originalEnv);
-        file_put_contents($envPath, $modifiedEnv);
-
         $dbFile = tempnam(sys_get_temp_dir(), 'db');
         $pdo = new PDO('sqlite:' . $dbFile);
         $pdo->exec('CREATE TABLE user_state (tg_user_id INTEGER PRIMARY KEY, step INTEGER NOT NULL, data TEXT NOT NULL, updated_at TEXT);');
@@ -110,18 +123,19 @@ final class WebhookTest extends TestCase
             2 => ['pipe', 'w'],
         ];
 
+        $envDir = $this->createTempEnvDir();
         $env = [
-            'BOT_TOKEN' => 'dummy',
-            'DB_NAME' => 'test',
-            'DB_USER' => 'user',
-            'DB_PASSWORD' => 'pass',
-            'DB_DSN' => 'sqlite:' . $dbFile,
-            'API_URL' => 'file://' . $apiDir . '/',
-            'WEBHOOK_SECRET' => '',
+            'BOT_TOKEN'      => 'dummy',
+            'DB_NAME'        => 'test',
+            'DB_USER'        => 'user',
+            'DB_PASSWORD'    => 'pass',
+            'DB_DSN'         => 'sqlite:' . $dbFile,
+            'API_URL'        => 'file://' . $apiDir . '/',
             // IP, принадлежащий диапазонам Telegram, чтобы пройти проверку.
-            'REMOTE_ADDR' => '149.154.160.1',
+            'REMOTE_ADDR'    => '149.154.160.1',
             // Передаём заголовок Content-Length через переменную окружения.
             'CONTENT_LENGTH' => (string) strlen($oversizedBody),
+            'DOTENV_PATH'    => $envDir,
         ];
 
         $proc = proc_open(PHP_BINARY . ' bracelet/webhook.php', $descriptorSpec, $pipes, __DIR__ . '/..', $env);
@@ -132,8 +146,9 @@ final class WebhookTest extends TestCase
         stream_get_contents($pipes[2]);
         proc_close($proc);
 
-        // Восстанавливаем исходное содержимое .env-файла.
-        file_put_contents($envPath, $originalEnv);
+        // Удаляем временный .env-файл.
+        unlink($envDir . '/.env.bracelet');
+        rmdir($envDir);
 
         // Проверяем, что лог содержит запись о превышении размера запроса.
         $this->assertFileExists($logFile);
