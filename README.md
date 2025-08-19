@@ -35,11 +35,22 @@
    set +a
    ```
 
-4. Подготовьте базу данных PostgreSQL:
+4. Подготовьте базу данных.
+   В каталоге `bracelet/sql/` файл `schema.sql` содержит блоки для разных СУБД.
+   Перед выполнением команд активируйте блок вашей базы данных либо
+   воспользуйтесь отдельными файлами `schema.sqlite.sql` и `schema.mysql.sql`.
+
+   Пример для PostgreSQL:
 
    ```bash
    createdb "$DB_NAME"
    psql -U "$DB_USER" -d "$DB_NAME" -f bracelet/sql/schema.sql
+   ```
+
+   Пример для SQLite:
+
+   ```bash
+   sqlite3 bracelet.sqlite < bracelet/sql/schema.sqlite.sql
    ```
 
 5. Запустите встроенный сервер PHP из корня проекта.
