@@ -16,14 +16,9 @@ namespace Bracelet;
  * @return bool true, если адрес принадлежит одному из известных диапазонов Telegram.
  */
 function isTelegramIP(string $ip): bool {
-    // Официально опубликованные Telegram диапазоны IPv4 и IPv6
-    $ranges = [
-        '149.154.160.0/20',
-        '91.108.4.0/22',
-        '2001:67c:4e8::/48',
-        '2001:b28:f23d::/48',
-        '2001:b28:f23f::/48',
-    ];
+    // Загружаем официально опубликованные Telegram диапазоны IPv4 и IPv6
+    // из конфигурационного файла. Файл возвращает массив строк в формате CIDR.
+    $ranges = require __DIR__ . '/config/telegram_ips.php';
 
     foreach ($ranges as $range) {
         if (ipInRange($ip, $range)) {
