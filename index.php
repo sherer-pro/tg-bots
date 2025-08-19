@@ -1,25 +1,22 @@
 <?php
-/**
- * Подключаем функции логирования до проверки автозагрузчика,
- * чтобы сообщения об ошибках попадали в файл логов
- * даже при отсутствии Composer autoload.
- */
-require_once __DIR__ . '/bracelet/logger.php';
+declare(strict_types=1);
 
-/**
- * Подключение автозагрузчика Composer с проверкой наличия.
- *
- * @throws RuntimeException если autoload отсутствует.
- */
+use function Bracelet\runWebhook;
+
+// Путь к автозагрузчику Composer.
 $autoload = __DIR__ . '/vendor/autoload.php';
 if (!file_exists($autoload)) {
-    logError('Не найден autoload Composer. Выполни "composer install".');
+    // При отсутствии autoload фиксируем проблему через системный лог
+    // и уведомляем о необходимости установки зависимостей.
+    error_log('Не найден autoload Composer. Выполни "composer install".');
     throw new RuntimeException('Файл autoload.php отсутствует');
 }
 require_once $autoload;
 
-/**
- * Точка входа для HTTP-запросов к корню домена.
- * Просто делегирует обработку webhook-скрипту бота.
- */
+// Подключаем скрипт вебхука, определяющий функцию runWebhook.
 require __DIR__ . '/bracelet/webhook.php';
+
+/**
+ * Запускаем обработку входящего HTTP-запроса Telegram.
+ */
+runWebhook();

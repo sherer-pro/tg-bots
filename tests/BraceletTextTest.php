@@ -1,6 +1,7 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
+use function Bracelet\braceletText;
 
 /**
  * Тесты функции braceletText, рассчитывающей последовательность бусин.

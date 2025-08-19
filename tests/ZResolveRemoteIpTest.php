@@ -1,21 +1,13 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
+use function Bracelet\resolveRemoteIp;
 
 /**
  * Тесты функции resolveRemoteIp, определяющей IP-адрес клиента.
  */
 final class ZResolveRemoteIpTest extends TestCase
 {
-    /**
-     * Подключаем модуль сетевых функций, содержащий resolveRemoteIp.
-     * Теперь нет необходимости подключать весь webhook.php и подавлять его
-     * выполнение через константу.
-     */
-    public static function setUpBeforeClass(): void
-    {
-        require_once __DIR__ . '/../bracelet/network.php';
-    }
 
     /**
      * При наличии заголовка X-Forwarded-For используется первый IP из списка.

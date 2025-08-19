@@ -1,7 +1,8 @@
 <?php
-require_once __DIR__ . '/../bracelet/telegram_ip.php';
 
 use PHPUnit\Framework\TestCase;
+use function Bracelet\ipInRange;
+use function Bracelet\isTelegramIP;
 
 /**
  * Тесты функций, проверяющих IP-адреса на принадлежность Telegram.
