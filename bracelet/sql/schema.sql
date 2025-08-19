@@ -1,18 +1,69 @@
-CREATE TABLE log (
-                     id           SERIAL PRIMARY KEY,
-                     tg_user_id   BIGINT,
-                     wrist_cm     NUMERIC(5,1),
-                     wraps        INT,
-                     pattern      TEXT,
-                     magnet_mm    NUMERIC(5,1),
-                     tolerance_mm NUMERIC(5,1),
-                     result_text  TEXT,
-                     created_at   TIMESTAMPTZ DEFAULT now()
-);
+-- Схема базы данных для различных СУБД.
+-- Используйте блок, соответствующий вашему диалекту.
 
-CREATE TABLE user_state (
-    tg_user_id BIGINT PRIMARY KEY,
-    step SMALLINT NOT NULL,
-    data JSONB NOT NULL DEFAULT '{}'::jsonb,
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
+-- PostgreSQL ---------------------------------------------------------------
+-- В этом варианте используется тип JSONB для хранения произвольных данных.
+--
+-- CREATE TABLE log (
+--     id           SERIAL PRIMARY KEY,
+--     tg_user_id   BIGINT,
+--     wrist_cm     NUMERIC(5,1),
+--     wraps        INT,
+--     pattern      TEXT,
+--     magnet_mm    NUMERIC(5,1),
+--     tolerance_mm NUMERIC(5,1),
+--     result_text  TEXT,
+--     created_at   TIMESTAMPTZ DEFAULT now()
+-- );
+--
+-- CREATE TABLE user_state (
+--     tg_user_id BIGINT PRIMARY KEY,
+--     step       SMALLINT NOT NULL,
+--     data       JSONB NOT NULL DEFAULT '{}'::jsonb,
+--     updated_at TIMESTAMPTZ DEFAULT now()
+-- );
+
+-- SQLite -----------------------------------------------------------------
+-- Здесь поле data хранится в текстовом виде.
+--
+-- CREATE TABLE log (
+--     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+--     tg_user_id   INTEGER,
+--     wrist_cm     REAL,
+--     wraps        INTEGER,
+--     pattern      TEXT,
+--     magnet_mm    REAL,
+--     tolerance_mm REAL,
+--     result_text  TEXT,
+--     created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+-- );
+--
+-- CREATE TABLE user_state (
+--     tg_user_id INTEGER PRIMARY KEY,
+--     step       INTEGER NOT NULL,
+--     data       TEXT NOT NULL DEFAULT '{}',
+--     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+-- );
+
+-- MySQL -------------------------------------------------------------------
+-- Для MySQL используется тип JSON и автоматическое обновление времени.
+--
+-- CREATE TABLE log (
+--     id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+--     tg_user_id   BIGINT,
+--     wrist_cm     DECIMAL(5,1),
+--     wraps        INT,
+--     pattern      TEXT,
+--     magnet_mm    DECIMAL(5,1),
+--     tolerance_mm DECIMAL(5,1),
+--     result_text  TEXT,
+--     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- ) ENGINE=InnoDB;
+--
+-- CREATE TABLE user_state (
+--     tg_user_id BIGINT PRIMARY KEY,
+--     step       SMALLINT NOT NULL,
+--     data       JSON NOT NULL,
+--     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+-- ) ENGINE=InnoDB;
+
