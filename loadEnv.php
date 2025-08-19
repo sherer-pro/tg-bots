@@ -31,26 +31,33 @@ use Dotenv\Dotenv;
 /**
  * Загружает переменные окружения для конкретного Telegram-бота.
  *
- * Функция ищет файл `.env.<имя_бота>` в корневом каталоге проекта и
- * считывает переменные окружения с помощью библиотеки `vlucas/phpdotenv`.
- * При отсутствии файла выбрасывается исключение с понятным описанием.
+ * Функция ищет файл вида `.env.<имя_бота>` и с помощью библиотеки
+ * `vlucas/phpdotenv` подгружает переменные окружения в `$_ENV` и
+ * процесс. По умолчанию поиск выполняется в корневом каталоге проекта,
+ * однако путь можно переопределить аргументом или переменной окружения
+ * `DOTENV_PATH`.
  *
- * @param string $botName Имя бота, которое соответствует суффиксу в названии файла.
+ * @param string      $botName  Имя бота, которое соответствует суффиксу в названии файла.
+ * @param string|null $basePath Альтернативный каталог с `.env`. Если не задан,
+ *                              используется переменная `DOTENV_PATH` или
+ *                              корень проекта.
  *
- * @throws RuntimeException Если автозагрузчик Composer или файл с переменными
- *                          окружения не найден.
+ * @throws RuntimeException Если файл с переменными окружения не найден.
  *
  * @return void
  */
-function loadBotEnv(string $botName): void
+function loadBotEnv(string $botName, ?string $basePath = null): void
 {
     // Формируем имя файла с настройками вида `.env.<botName>`.
     $envFile = ".env.$botName";
-    $basePath = __DIR__;
 
-    // Проверяем существование файла, чтобы не получить трудно отлавливаемую ошибку от Dotenv.
-    if (!file_exists($basePath . DIRECTORY_SEPARATOR . $envFile)) {
-        throw new RuntimeException("Файл окружения {$envFile} не найден");
+    // Определяем каталог: аргумент, затем переменная окружения DOTENV_PATH, иначе корень проекта.
+    $basePath = $basePath ?? getenv('DOTENV_PATH') ?: __DIR__;
+
+    // Полный путь к файлу окружения.
+    $fullPath = $basePath . DIRECTORY_SEPARATOR . $envFile;
+    if (!file_exists($fullPath)) {
+        throw new RuntimeException("Файл окружения {$envFile} не найден в {$basePath}");
     }
 
     /**
@@ -58,7 +65,7 @@ function loadBotEnv(string $botName): void
      * окружения из найденного файла. Это позволяет отслеживать,
      * какие настройки были использованы при запуске бота.
      */
-    logInfo("Загружаем переменные из {$envFile}");
+    logInfo("Загружаем переменные из {$fullPath}");
 
     // Загружаем переменные окружения из указанного файла.
     $dotenv = Dotenv::createImmutable($basePath, $envFile);
