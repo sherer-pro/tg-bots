@@ -279,7 +279,19 @@ namespace Bracelet {
 
     // Если файл запущен напрямую (например, через CLI), запускаем обработку.
     if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
-        (new WebhookProcessor())->handle();
+        try {
+            (new WebhookProcessor())->handle();
+        } catch (InvalidIpException|InvalidTokenException $e) {
+            // Запрос отклонён из-за IP или токена.
+            http_response_code(403);
+        } catch (OversizedBodyException $e) {
+            // Размер тела превышает допустимый лимит.
+            http_response_code(413);
+        } catch (BadRequestException $e) {
+            // Проблема в формате запроса: пустое тело, неверный JSON и т. п.
+            http_response_code(400);
+            echo $e->getMessage();
+        }
     }
 }
 
