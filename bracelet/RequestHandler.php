@@ -54,16 +54,16 @@ class RequestHandler
     }
 
     /**
-     * Считывает и валидирует запрос, возвращая данные сообщения.
+     * Считывает и валидирует запрос, возвращая DTO с данными сообщения.
      *
-     * @return array{message: array, chatId: int, userId: int, userLang: string} Данные сообщения пользователя.
+     * @return Request Объект, содержащий все необходимые данные входящего сообщения.
      *
      * @throws InvalidIpException      Если IP-адрес не принадлежит Telegram.
      * @throws InvalidTokenException   При некорректном секретном токене.
      * @throws OversizedBodyException  Если размер тела превышает допустимый.
      * @throws BadRequestException     При пустом теле, ошибочном JSON или отсутствии поля `message`.
      */
-    public function handle(): array
+    public function handle(): Request
     {
         // Получаем заголовки и приводим их к нижнему регистру для единообразия.
         $headers = function_exists('getallheaders') ? getallheaders() : [];
@@ -147,12 +147,8 @@ class RequestHandler
         $userId = $msg['from']['id'];
         $userLang = $msg['from']['language_code'] ?? 'ru';
 
-        return [
-            'message' => $msg,
-            'chatId' => $chatId,
-            'userId' => $userId,
-            'userLang' => $userLang,
-        ];
+        // Возвращаем DTO с заполненными полями.
+        return new Request($msg, $chatId, $userId, $userLang);
     }
 }
 
