@@ -121,7 +121,10 @@ class RequestHandler
         }
 
         // Пытаемся декодировать JSON.
-        $update = json_decode($body, true);
+        // Используем флаг JSON_BIGINT_AS_STRING, чтобы большие числа
+        // (например, идентификаторы чатов/пользователей) не теряли точность
+        // и возвращались строками.
+        $update = json_decode($body, true, 512, JSON_BIGINT_AS_STRING);
         if ($update === null && json_last_error() !== JSON_ERROR_NONE) {
             $errorMessage = 'Некорректный JSON: ' . json_last_error_msg();
             logError($errorMessage . '; данные: ' . $body . '; IP ' . $remoteIp);
@@ -143,8 +146,23 @@ class RequestHandler
         $decodedMsg = json_encode($msg, JSON_UNESCAPED_UNICODE);
         logInfo('Получено сообщение: ' . $decodedMsg . '; IP ' . $remoteIp);
 
-        $chatId = $msg['chat']['id'];
-        $userId = $msg['from']['id'];
+        // Извлекаем идентификаторы и проверяем их валидность.
+        $rawChatId = $msg['chat']['id'] ?? null;
+        $rawUserId = $msg['from']['id'] ?? null;
+
+        // Проверяем, что идентификаторы — целые числа или строки из цифр.
+        if (!is_int($rawChatId) && !(is_string($rawChatId) && preg_match('/^-?\d+$/', $rawChatId))) {
+            logError('Некорректный chat.id: ' . var_export($rawChatId, true));
+            throw new BadRequestException('Некорректный идентификатор чата');
+        }
+        if (!is_int($rawUserId) && !(is_string($rawUserId) && preg_match('/^-?\d+$/', $rawUserId))) {
+            logError('Некорректный from.id: ' . var_export($rawUserId, true));
+            throw new BadRequestException('Некорректный идентификатор пользователя');
+        }
+
+        // Приводим строковые значения к int после успешной проверки.
+        $chatId   = (int) $rawChatId;
+        $userId   = (int) $rawUserId;
         $userLang = $msg['from']['language_code'] ?? 'ru';
 
         // Возвращаем DTO с заполненными полями.

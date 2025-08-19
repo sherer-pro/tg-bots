@@ -101,10 +101,11 @@ namespace {
          */
         private function sampleUpdate(): string
         {
+            // Идентификаторы передаются строками, чтобы проверить приведение к int.
             return json_encode([
                 'message' => [
-                    'chat' => ['id' => 1],
-                    'from' => ['id' => 42, 'language_code' => 'ru'],
+                    'chat' => ['id' => '1'],
+                    'from' => ['id' => '42', 'language_code' => 'ru'],
                     'text' => 'test',
                 ],
             ], JSON_UNESCAPED_UNICODE);

@@ -36,12 +36,14 @@ if ($update === null || !isset($update['message'])) {
 }
 
 // Извлекаем данные о чате и тексте сообщения пользователя.
-$chatId = $update['message']['chat']['id'] ?? null;
-$text   = $update['message']['text'] ?? '';
-if ($chatId === null) {
-    // Без идентификатора чата невозможно отправить ответ.
+$rawChatId = $update['message']['chat']['id'] ?? null;
+$text      = $update['message']['text'] ?? '';
+if ($rawChatId === null || (!is_int($rawChatId) && !(is_string($rawChatId) && preg_match('/^-?\d+$/', $rawChatId)))) {
+    // Без корректного идентификатора чата невозможно отправить ответ.
     exit;
 }
+// Приводим возможную строку к целому числу.
+$chatId = (int) $rawChatId;
 
 // Формируем текст ответа.
 $responseText = 'Вы написали: ' . $text;
