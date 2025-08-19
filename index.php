@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-use function Bracelet\runWebhook;
+use Bracelet\WebhookProcessor;
 
 // Путь к автозагрузчику Composer.
 $autoload = __DIR__ . '/vendor/autoload.php';
@@ -13,10 +13,10 @@ if (!file_exists($autoload)) {
 }
 require_once $autoload;
 
-// Подключаем скрипт вебхука, определяющий функцию runWebhook.
+// Подключаем класс обработчика webhook-запроса.
 require __DIR__ . '/bracelet/webhook.php';
 
 /**
- * Запускаем обработку входящего HTTP-запроса Telegram.
+ * Создаём обработчик и запускаем обработку входящего HTTP-запроса Telegram.
  */
-runWebhook();
+(new WebhookProcessor())->handle();
