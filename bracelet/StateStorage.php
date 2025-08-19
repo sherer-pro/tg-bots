@@ -19,11 +19,20 @@ class StateStorage
     private PDO $pdo;
 
     /**
+     * @var string Диалект используемой СУБД (pgsql, sqlite и т.д.).
+     *             Позволяет подготавливать разные SQL-запросы при необходимости.
+     */
+    private string $dialect;
+
+    /**
      * @param PDO $pdo Готовое подключение к базе данных.
      */
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+
+        // Определяем тип драйвера, с которым работает PDO.
+        $this->dialect = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
     }
 
     /**
@@ -37,8 +46,11 @@ class StateStorage
     public function initState(int $userId): void
     {
         $this->pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
-        $this->pdo->prepare('INSERT INTO user_state (tg_user_id, step, data) VALUES (?,1,?::jsonb)')
-            ->execute([$userId, json_encode([], JSON_UNESCAPED_UNICODE)]);
+        $stmt = $this->pdo->prepare('INSERT INTO user_state (tg_user_id, step, data) VALUES (?,1,?)');
+        // Вставляем JSON-данные как строку, указывая тип параметра явно.
+        $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+        $stmt->bindValue(2, json_encode([], JSON_UNESCAPED_UNICODE), PDO::PARAM_STR);
+        $stmt->execute();
     }
 
     /**
@@ -96,7 +108,10 @@ class StateStorage
         }
 
         // Передаём корректно сериализованные данные в запрос
-        $stmt->execute([$step, $jsonData, $userId]);
+        $stmt->bindValue(1, $step, PDO::PARAM_INT);
+        $stmt->bindValue(2, $jsonData, PDO::PARAM_STR);
+        $stmt->bindValue(3, $userId, PDO::PARAM_INT);
+        $stmt->execute();
     }
 
     /**
