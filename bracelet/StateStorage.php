@@ -69,9 +69,30 @@ class StateStorage
         if ($row === false) {
             return null; // Состояние отсутствует
         }
+
+        // Декодируем JSON из базы данных
+        $data = json_decode($row['data'], true);
+
+        // Проверяем, не возникла ли ошибка декодирования
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            // Формируем подробное сообщение об ошибке
+            $message = sprintf(
+                'Ошибка JSON при чтении состояния пользователя %d: %s',
+                $userId,
+                json_last_error_msg()
+            );
+
+            // Записываем информацию об ошибке в лог
+            logError($message);
+
+            // Прерываем выполнение, поскольку восстановить состояние невозможно
+            throw new RuntimeException($message);
+        }
+
         return [
             'step' => (int)$row['step'],
-            'data' => json_decode($row['data'], true) ?: [],
+            // Гарантируем, что в поле data будет массив
+            'data' => is_array($data) ? $data : [],
         ];
     }
 
