@@ -4,13 +4,33 @@ namespace Bracelet;
 /**
  * Файл вспомогательных функций для логирования.
  *
- * Содержит константу `LOG_FILE` и публичные функции `logError` и `logInfo`
+ * Содержит публичные функции `logError` и `logInfo`
  * для записи сообщений разных уровней. Общая логика вынесена во
- * внутреннюю функцию `writeLog`.
+ * внутреннюю функцию `writeLog`. Путь к файлу логов может быть
+ * переопределён через переменную окружения `LOG_FILE`.
  */
 
-// Путь к файлу логов приложения.
-const LOG_FILE = __DIR__ . '/logs/app.log';
+/**
+ * Возвращает путь к файлу логов приложения.
+ *
+ * Значение берётся из переменной окружения `LOG_FILE`. Если переменная
+ * не задана или пуста, используется путь по умолчанию
+ * `__DIR__ . '/logs/app.log'`.
+ *
+ * @internal
+ *
+ * @return string Путь к лог‑файлу.
+ */
+function getLogFilePath(): string
+{
+    // Получаем значение переменной окружения, если оно существует.
+    $path = getenv('LOG_FILE');
+
+    // Если переменная не установлена или пуста, возвращаем стандартный путь.
+    return $path === false || $path === ''
+        ? __DIR__ . '/logs/app.log'
+        : $path;
+}
 
 /**
  * Приватная функция, осуществляющая запись строки в файл логов.
@@ -29,8 +49,11 @@ const LOG_FILE = __DIR__ . '/logs/app.log';
  */
 function writeLog(string $message, string $level): void
 {
+    // Вычисляем актуальный путь к файлу логов.
+    $logFile = getLogFilePath();
+
     // Определяем каталог, где должен находиться файл логов.
-    $dir = dirname(LOG_FILE);
+    $dir = dirname($logFile);
     // Если каталога нет, создаём его рекурсивно.
     if (!is_dir($dir)) {
         // Ограничиваем права доступа к каталогу логов.
@@ -48,14 +71,14 @@ function writeLog(string $message, string $level): void
     $entry = sprintf('[%s] [%s] %s\n', $time, $level, $safeMessage);
 
     // Пытаемся записать строку в файл логов.
-    $result = error_log($entry, 3, LOG_FILE);
+    $result = error_log($entry, 3, $logFile);
 
     // Если запись не удалась, сообщаем об этом через предупреждение.
     if ($result === false) {
         trigger_error(
             sprintf(
                 'Не удалось записать сообщение в лог-файл: %s',
-                LOG_FILE
+                $logFile
             ),
             E_USER_WARNING
         );
