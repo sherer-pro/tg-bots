@@ -4,182 +4,71 @@ declare(strict_types=1);
 require_once __DIR__ . '/logger.php'; // Функции логирования доступны сразу
 require_once __DIR__ . '/calc.php'; // Подключаем функции расчёта браслета
 require_once __DIR__ . '/scenario.php'; // Подключаем логику пошагового сценария
-// Общие сетевые инструменты, включая resolveRemoteIp, вынесены в отдельный модуль,
-// чтобы их можно было переиспользовать и тестировать изолированно.
 require_once __DIR__ . '/network.php'; // Функции работы с сетью
-// Функции проверки IP-адресов Telegram отделены в модуль telegram_ip.php,
-// чтобы не смешивать логику проверки списков адресов с определением IP клиента.
 require_once __DIR__ . '/telegram_ip.php'; // Подключаем функции проверки IP Telegram
+require_once __DIR__ . '/RequestHandler.php'; // Чтение и валидация входящего запроса
+require_once __DIR__ . '/StateStorage.php';   // Работа с таблицами user_state и log
+require_once __DIR__ . '/TelegramApi.php';    // Отправка сообщений через API
 
-// Основной сценарий обработки входящих запросов Telegram. Теперь файл
-// предназначен исключительно для непосредственного запуска вебхука и не
-// предполагается его подключение как библиотеки.
+// Основной сценарий обработки входящих запросов Telegram. Файл предназначен
+// исключительно для запуска вебхука и выполняет лишь оркестрацию.
 
 try {
     // Подключаем конфигурацию, где задаются переменные окружения
     require __DIR__ . '/config.php';
 } catch (Throwable $e) {
-    // Если конфигурацию загрузить не удалось,
-    // фиксируем ошибку и пробрасываем исключение дальше,
-    // чтобы тесты или другие скрипты могли обработать её самостоятельно
+    // Если конфигурацию загрузить не удалось, фиксируем ошибку и
+    // пробрасываем исключение дальше для обработки тестами
     logError('Ошибка конфигурации: ' . $e->getMessage());
     throw $e;
 }
 
-// Получаем заголовки и определяем IP-адрес отправителя
-$headers = function_exists('getallheaders') ? getallheaders() : [];
-
-// Нормализуем имена заголовков один раз на раннем этапе. Далее весь код,
-// включая resolveRemoteIp и проверку токена, работает с уже приведёнными к
-// нижнему регистру ключами.
-$headers = array_change_key_case($headers, CASE_LOWER);
-
-/**
- * Флаг доверия к заголовку `X-Forwarded-For`.
- * Его можно задать через переменную окружения `TRUST_FORWARDED`, установив
- * значение `true` или `1`. По умолчанию заголовку не доверяем, так как он
- * может быть подделан, если запрос проходит через непроверенный прокси.
- *
- * @var bool $trustForwarded
- */
+// Определяем, доверять ли заголовку X-Forwarded-For
 $trustForwarded = filter_var(
     $_ENV['TRUST_FORWARDED'] ?? getenv('TRUST_FORWARDED'),
     FILTER_VALIDATE_BOOLEAN
 );
 
-$remoteIp = resolveRemoteIp($headers, $_SERVER, $trustForwarded); // передаём уже нормализованные заголовки
+// Создаём необходимые объекты
+$requestHandler = new RequestHandler($trustForwarded);
+$telegram       = new TelegramApi();
 
-// Всегда убеждаемся, что запрос пришёл с IP Telegram
-if (!isTelegramIP($remoteIp)) {
-    logError('Недопустимый запрос: IP ' . $remoteIp);
-    http_response_code(403);
-    exit;
-}
+// Читаем и валидируем входящий запрос
+$req      = $requestHandler->handle();
+$msg      = $req['message'];
+$chatId   = $req['chatId'];
+$userId   = $req['userId'];
+$userLang = $req['userLang'];
 
-/**
- * Секретный токен, заданный в переменных окружения.
- * Отсутствие значения допустимо только в тестовой среде.
- *
- * @var string $secret
- */
-$secret = $_ENV['WEBHOOK_SECRET'] ?? getenv('WEBHOOK_SECRET') ?: '';
-
-if ($secret !== '') {
-    // При наличии секрета сверяем его с заголовком Telegram
-    if (!isset($headers['x-telegram-bot-api-secret-token'])
-        || !hash_equals($secret, $headers['x-telegram-bot-api-secret-token'])) {
-        /** @var string $token Токен из заголовка запроса */
-        $token = $headers['x-telegram-bot-api-secret-token'] ?? '';
-        /** @var string $maskedToken Маскируем токен, показывая только первые четыре символа */
-        $maskedToken = $token !== '' ? substr($token, 0, 4) . '***' : '';
-        logError('Недопустимый токен: ' . $maskedToken . ', IP ' . $remoteIp);
-        http_response_code(403);
-        exit;
-    }
-}
-
-// Максимально допустимый объём входящего тела запроса — 1 мегабайт.
-// Более крупные запросы считаются подозрительными и отвергаются сразу.
-$maxBodySize = 1024 * 1024; // 1 МБ в байтах
-
-// Перед чтением `php://input` проверяем указанный клиентом размер тела.
-// Заголовок `Content-Length` может отсутствовать, поэтому дополнительно
-// анализируем переменную `$_SERVER['CONTENT_LENGTH']`.
-$contentLengthHeader = (int) ($headers['content-length'] ?? ($_SERVER['CONTENT_LENGTH'] ?? 0));
-if ($contentLengthHeader > $maxBodySize) {
-    // Сообщаем в лог, что запрос превысил лимит, и прекращаем обработку.
-    logError('Превышен допустимый размер запроса по заголовку: ' . $contentLengthHeader . ' байт');
-    http_response_code(413); // HTTP 413 Payload Too Large
-    exit; // Немедленно завершаем выполнение скрипта
-}
-
-// Считываем тело запроса и проверяем фактический размер полученных данных.
-$body = file_get_contents('php://input');
-// Логируем тело запроса и IP-адрес отправителя сразу после чтения
-// для упрощения диагностики потенциальных проблем
-logInfo('Получено тело запроса от IP ' . $remoteIp . ': ' . $body);
-if (strlen($body) > $maxBodySize) {
-    // Если реальный размер оказался больше ожидаемого, логируем инцидент
-    // и возвращаем ошибку 413. Это защищает от некорректных клиентов,
-    // которые могли подделать или не указать заголовок `Content-Length`.
-    logError('Превышен допустимый размер запроса: ' . strlen($body) . ' байт');
-    http_response_code(413);
-    exit;
-}
-
-// Перед декодированием убеждаемся, что тело запроса не пустое
-if (trim($body) === '') {
-    // Сообщаем об отсутствии данных и включаем IP-адрес отправителя в лог
-    $errorMessage = 'Пустое тело запроса';
-    logError($errorMessage . ', IP ' . $remoteIp);
-    http_response_code(400);
-    echo $errorMessage;
-    exit;
-}
-
-// Пытаемся декодировать JSON только после успешного прохождения проверки размеров
-$update = json_decode($body, true);
-if ($update === null && json_last_error() !== JSON_ERROR_NONE) {
-    // При ошибке разбора указываем детальное описание проблемы
-    $errorMessage = 'Некорректный JSON: ' . json_last_error_msg();
-    logError($errorMessage . '; данные: ' . $body . '; IP ' . $remoteIp);
-    http_response_code(400);
-    echo $errorMessage;
-    exit;
-}
-if (!isset($update['message'])) {
-    // Логируем полное обновление, если ключ message отсутствует, чтобы
-    // можно было диагностировать источник некорректного запроса
-    logError(
-        'Некорректное обновление: поле message отсутствует. Полный JSON: '
-        . json_encode($update, JSON_UNESCAPED_UNICODE)
-    );
-    exit;
-}
-$msg    = $update['message'];
-$decodedMsg = json_encode($msg, JSON_UNESCAPED_UNICODE);
-// Фиксируем в логе факт получения сообщения и IP отправителя
-logInfo('Получено сообщение: ' . $decodedMsg . '; IP ' . $remoteIp);
-$chatId = $msg['chat']['id'];
-$userId = $msg['from']['id'];
-$userLang = $msg['from']['language_code'] ?? 'ru';
-
-// Устанавливаем соединение с базой данных, так как оно потребуется
-// как для обработки команды /start, так и для дальнейших шагов диалога.
+// Устанавливаем соединение с базой данных
 try {
     /** @var PDO $pdo Подключение к базе данных */
     $pdo = new PDO(DB_DSN, DB_USER, DB_PASSWORD, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
     ]);
 } catch (PDOException $e) {
-    // При ошибке подключения уведомляем пользователя и логируем детали
     $text = $userLang === 'en'
         ? 'Database connection error. Please try again later.'
         : 'Ошибка подключения к базе данных. Попробуй позже.';
     logError('Ошибка подключения к БД: ' . $e->getMessage());
-    // Отправляем пользователю информацию об ошибке и проверяем результат
-    if (!send($text, $chatId)) {
-        // Логируем предупреждение, если сообщение не ушло
+    if (!$telegram->send($text, $chatId)) {
         logError('Предупреждение: не удалось отправить уведомление об ошибке подключения, чат ' . $chatId);
     }
     exit;
 }
 
+$storage = new StateStorage($pdo);
+
 // Обрабатываем команду /start
 if (isset($msg['text']) && preg_match('/^\/start(?:\s|$)/', $msg['text'])) {
     try {
-        // Очищаем возможное предыдущее состояние пользователя и создаём новое
-        $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
-        $pdo->prepare('INSERT INTO user_state (tg_user_id, step, data) VALUES (?,1,?::jsonb)')
-            ->execute([$userId, json_encode([], JSON_UNESCAPED_UNICODE)]);
+        $storage->initState($userId); // Создаём состояние первого шага
     } catch (PDOException $e) {
-        // Логируем ошибку и уведомляем пользователя о проблеме на сервере
         logError('Ошибка при инициализации состояния: ' . $e->getMessage());
         $text = $userLang === 'en'
             ? 'Server error. Try again later.'
             : 'Ошибка сервера. Попробуй позже.';
-        // Пытаемся уведомить пользователя и фиксируем результат отправки
-        if (!send($text, $chatId)) {
+        if (!$telegram->send($text, $chatId)) {
             logError('Предупреждение: не удалось отправить сообщение об ошибке инициализации, чат ' . $chatId);
         }
         exit;
@@ -188,56 +77,48 @@ if (isset($msg['text']) && preg_match('/^\/start(?:\s|$)/', $msg['text'])) {
     $text = $userLang === 'en'
         ? 'Step 1 of 5. Enter wrist circumference in centimeters.'
         : 'Шаг 1 из 5. Введи обхват запястья в сантиметрах.';
-    // Логируем начало сценария для текущего пользователя
+    // Логируем начало сценария
     logInfo('Начало сценария: пользователь ' . $userId . ', язык ' . $userLang . ', чат ' . $chatId);
-    // Отправляем приглашение к первому шагу и проверяем, что сообщение доставлено
-    if (!send($text, $chatId)) {
+    if (!$telegram->send($text, $chatId)) {
         logError('Предупреждение: не удалось отправить стартовое сообщение, чат ' . $chatId);
     }
     exit;
 }
 
-// Пытаемся получить текущее состояние пользователя
+// Получаем текущее состояние пользователя
 try {
-    $stmt = $pdo->prepare('SELECT step, data FROM user_state WHERE tg_user_id = ?');
-    $stmt->execute([$userId]);
-    /** @var array{step:int,data:string}|false $state */
-    $state = $stmt->fetch(PDO::FETCH_ASSOC);
+    $state = $storage->getState($userId);
 } catch (PDOException $e) {
     logError('Ошибка чтения состояния: ' . $e->getMessage());
     $text = $userLang === 'en'
         ? 'Server error. Try again later.'
         : 'Ошибка сервера. Попробуй позже.';
-    // Пытаемся сообщить пользователю о проблеме и фиксируем результат
-    if (!send($text, $chatId)) {
+    if (!$telegram->send($text, $chatId)) {
         logError('Предупреждение: не удалось отправить сообщение об ошибке чтения состояния, чат ' . $chatId);
     }
     exit;
 }
 
-if ($state === false) {
-    // Нет активного диалога — предлагаем начать заново
+if ($state === null) {
+    // Диалог не начат — предлагаем отправить /start
     $text = $userLang === 'en'
         ? 'Send /start to begin.'
         : 'Отправь /start, чтобы начать.';
-    // Сообщаем пользователю, что диалог не начат, и проверяем отправку
-    if (!send($text, $chatId)) {
+    if (!$telegram->send($text, $chatId)) {
         logError('Предупреждение: не удалось отправить подсказку о /start, чат ' . $chatId);
     }
     exit;
 }
 
-$data = json_decode($state['data'], true) ?: [];
-$step = (int)$state['step'];
+$data = $state['data'];
+$step = $state['step'];
 
-// Обрабатываем только текстовые сообщения, так как от пользователя
-// ожидаются числовые значения или строки с узором
+// Обрабатываем только текстовые сообщения
 if (!isset($msg['text'])) {
     $text = $userLang === 'en'
         ? 'Please send a text value.'
         : 'Пожалуйста, введи значение текстом.';
-    // Отправляем рекомендацию отправить текст и проверяем доставку
-    if (!send($text, $chatId)) {
+    if (!$telegram->send($text, $chatId)) {
         logError('Предупреждение: не удалось отправить сообщение о необходимости текстового ввода, чат ' . $chatId);
     }
     exit;
@@ -245,7 +126,7 @@ if (!isset($msg['text'])) {
 
 $input = trim($msg['text']);
 
-// Обрабатываем текущий шаг сценария с помощью общей функции
+// Выполняем текущий шаг сценария
 $result = processStep($step, $input, $data, $userLang);
 $next = $result['next'];          // Номер следующего шага
 $responseText = $result['text'];  // Текст ответа пользователю
@@ -255,109 +136,21 @@ if ($next === 0) {
     if ($data !== [] && $step === 5) {
         // Пользователь успешно прошёл все шаги — сохраняем результат
         try {
-            $stmt = $pdo->prepare('INSERT INTO log (tg_user_id,wrist_cm,wraps,pattern,magnet_mm,tolerance_mm,result_text) VALUES (?,?,?,?,?,?,?)');
-            $stmt->execute([
-                $userId,
-                $data['wrist_cm'],
-                $data['wraps'],
-                $data['pattern'],
-                $data['magnet_mm'],
-                $data['tolerance_mm'],
-                $responseText,
-            ]);
-            $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
+            $storage->saveResult($userId, $data, $responseText);
         } catch (PDOException $e) {
             logError('Ошибка при сохранении результата: ' . $e->getMessage());
         }
     } else {
-        // Некорректный шаг — очищаем состояние и сообщаем в лог
-        $pdo->prepare('DELETE FROM user_state WHERE tg_user_id = ?')->execute([$userId]);
+        // Некорректный шаг — очищаем состояние
+        $storage->clearState($userId);
         logError('Неизвестный шаг диалога: ' . $step);
     }
 } else {
     // Сохраняем состояние и переходим к следующему шагу
-    saveState($pdo, $userId, $next, $data);
+    $storage->saveState($userId, $next, $data);
 }
-// Отправляем пользователю ответ и проверяем, успешно ли он доставлен
-if (!send($responseText, $chatId)) {
+
+// Отправляем пользователю ответ
+if (!$telegram->send($responseText, $chatId)) {
     logError('Предупреждение: не удалось отправить ответ, чат ' . $chatId);
-}
-
-/**
- * Отправляет сообщение пользователю.
- *
- * @param string      $text  Текст сообщения.
- * @param int|string  $chat  ID чата или @username.
- * @param array       $extra Дополнительные параметры.
- *
- * @return bool true при успешной отправке.
- */
-function send(string $text, int|string $chat, array $extra = []): bool {
-    $url  = API_URL . 'sendMessage';
-    $data = array_merge(['chat_id' => $chat, 'text' => $text], $extra);
-
-    // Инициализируем cURL для отправки POST-запроса
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,                     // Используем метод POST
-        CURLOPT_POSTFIELDS     => http_build_query($data),  // Тело запроса в формате key=value
-        CURLOPT_RETURNTRANSFER => true,                     // Возвращаем ответ как строку
-        CURLOPT_CONNECTTIMEOUT => 5,                        // Ждём соединение не более 5 секунд
-        CURLOPT_TIMEOUT        => 10,                       // Общее ожидание ответа — до 10 секунд
-    ]);
-
-    $response = curl_exec($ch);
-
-    // Проверяем наличие ошибок на уровне cURL
-    if ($response === false) {
-        // Логируем обнаруженную на уровне cURL ошибку и прекращаем отправку
-        logError('Ошибка cURL: ' . curl_error($ch));
-        curl_close($ch);
-        return false;
-    }
-
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    // Анализируем HTTP-статус ответа
-    if ($httpCode < 200 || $httpCode >= 300) {
-        // Фиксируем в логах некорректный HTTP-статус и тело ответа
-        logError('Ошибка HTTP: статус ' . $httpCode . '; ответ: ' . $response);
-        return false;
-    }
-
-    // Декодируем JSON-ответ Telegram
-    $decoded = json_decode($response, true);
-    if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
-        // Логируем некорректный JSON и прекращаем выполнение
-        logError('Некорректный JSON в ответе API: ' . $response);
-        return false;
-    }
-
-    // Проверяем наличие и значение флага `ok`
-    if (!isset($decoded['ok']) || $decoded['ok'] === false) {
-        // Сохраняем описание ошибки от Telegram, если оно присутствует
-        $desc = $decoded['description'] ?? 'неизвестная ошибка';
-        logError('Ошибка API Telegram: ' . $desc);
-        return false;
-    }
-
-    return true; // Всё прошло успешно
-}
-
-/**
- * Сохраняет состояние диалога пользователя в таблице `user_state`.
- *
- * @param PDO   $pdo     Подключение к базе данных.
- * @param int   $userId  Идентификатор пользователя Telegram.
- * @param int   $step    Текущий шаг сценария.
- * @param array $data    Накопленные параметры пользователя.
- *
- * @return void
- */
-function saveState(PDO $pdo, int $userId, int $step, array $data): void {
-    // CURRENT_TIMESTAMP поддерживается как PostgreSQL, так и SQLite,
-    // поэтому подходит для тестов и боевого окружения.
-    $stmt = $pdo->prepare('UPDATE user_state SET step = ?, data = ?, updated_at = CURRENT_TIMESTAMP WHERE tg_user_id = ?');
-    $stmt->execute([$step, json_encode($data, JSON_UNESCAPED_UNICODE), $userId]);
 }
