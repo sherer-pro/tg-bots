@@ -149,14 +149,39 @@ class StateStorage
     /**
      * Сохраняет итоговый результат расчёта и очищает состояние пользователя.
      *
-     * @param int    $userId      Идентификатор пользователя Telegram.
-     * @param array  $data        Данные, собранные в ходе диалога.
-     * @param string $resultText  Текст результата для записи в лог.
+     * Перед выполнением запроса убеждаемся, что в массиве $data
+     * присутствуют все обязательные поля. При отсутствии хотя бы одного
+     * ключа фиксируем ошибку в лог и прерываем выполнение.
+     *
+     * @param int    $userId     Идентификатор пользователя Telegram.
+     * @param array  $data       Данные, собранные в ходе диалога.
+     * @param string $resultText Текст результата для записи в лог.
+     *
+     * @throws RuntimeException Если отсутствует один из обязательных ключей данных.
      *
      * @return void
      */
     public function saveResult(int $userId, array $data, string $resultText): void
     {
+        // Список ключей, которые обязательно должны присутствовать
+        // для корректной записи результата в таблицу log.
+        $requiredKeys = ['wrist_cm', 'wraps', 'pattern', 'magnet_mm', 'tolerance_mm'];
+
+        // Проверяем наличие каждого ключа. Если хотя бы один отсутствует,
+        // логируем проблему и выбрасываем исключение.
+        foreach ($requiredKeys as $key) {
+            if (!array_key_exists($key, $data)) {
+                $message = sprintf(
+                    'Отсутствует обязательный ключ "%s" при сохранении результата пользователя %d',
+                    $key,
+                    $userId
+                );
+                logError($message); // Фиксируем ошибку в лог
+                throw new RuntimeException($message); // Прерываем выполнение
+            }
+        }
+
+        // После успешной проверки подготавливаем запрос на вставку данных.
         $stmt = $this->pdo->prepare('INSERT INTO log (tg_user_id,wrist_cm,wraps,pattern,magnet_mm,tolerance_mm,result_text) VALUES (?,?,?,?,?,?,?)');
         $stmt->execute([
             $userId,
