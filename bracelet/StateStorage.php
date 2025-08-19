@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bracelet;
 
 use PDO;
+use RuntimeException;
 
 /**
  * Класс для работы с таблицами `user_state` и `log` базы данных.
@@ -74,7 +75,28 @@ class StateStorage
     public function saveState(int $userId, int $step, array $data): void
     {
         $stmt = $this->pdo->prepare('UPDATE user_state SET step = ?, data = ?, updated_at = CURRENT_TIMESTAMP WHERE tg_user_id = ?');
-        $stmt->execute([$step, json_encode($data, JSON_UNESCAPED_UNICODE), $userId]);
+
+        // Сериализуем данные пользователя в JSON и сохраняем результат
+        $jsonData = json_encode($data, JSON_UNESCAPED_UNICODE);
+
+        // Проверяем наличие ошибок кодирования JSON
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            // Формируем детальное сообщение об ошибке
+            $message = sprintf(
+                'Ошибка JSON при сохранении состояния пользователя %d: %s',
+                $userId,
+                json_last_error_msg()
+            );
+
+            // Записываем информацию об ошибке в лог приложения
+            logError($message);
+
+            // Прерываем выполнение, поскольку состояние сохранить невозможно
+            throw new RuntimeException($message);
+        }
+
+        // Передаём корректно сериализованные данные в запрос
+        $stmt->execute([$step, $jsonData, $userId]);
     }
 
     /**
